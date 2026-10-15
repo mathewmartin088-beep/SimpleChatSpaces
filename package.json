@@ -1,13 +1,15 @@
 {
   "name": "hispace-server",
   "version": "1.0.0",
+  "description": "hispace production chat server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "nodemailer": "^6.9.1",
-    "ws": "^8.13.0"
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7",
+    "ws": "^8.16.0"
   }
 }
