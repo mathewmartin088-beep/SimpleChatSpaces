@@ -171,6 +171,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
         <button class="back" id="back" aria-label="Back to conversations">‹</button>
         <div class="avatar" id="chAv"></div>
         <div><h3 id="chName"></h3><small id="chSub"></small></div>
+        <button class="btn amber" id="callBtn" title="Start Voice Call" style="margin-left: auto;">📞 Call</button>
       </div>
       <div id="msgs"></div>
       <form class="composer" id="composer">
@@ -180,6 +181,21 @@ dialog h3{margin-bottom:4px;font-size:20px}
     </div>
   </main>
 </section>
+
+<!-- Audio Stream Element -->
+<audio id="remoteAudio" autoplay></audio>
+
+<!-- Call Dialog -->
+<dialog id="callDlg">
+  <div style="text-align: center; padding: 12px;">
+    <h3 id="callTitle">Voice Call</h3>
+    <p id="callSub" style="color:var(--muted); margin: 8px 0 16px;">Connecting...</p>
+    <div class="dlg-actions" style="justify-content: center; gap: 12px;">
+      <button class="btn amber" id="acceptCallBtn" hidden>Accept</button>
+      <button class="btn ghost" id="endCallBtn" style="background: var(--danger); color: white;">End Call</button>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="groupDlg">
   <form method="dialog" id="groupForm">
@@ -202,6 +218,13 @@ dialog h3{margin-bottom:4px;font-size:20px}
   const SESSION_KEY = 'hispace:session';
   let me = null, ws = null, state = null, online = new Set(), active = null;
   let retryTimer = null, manualClose = false;
+
+  // WebRTC Variables
+  let peerConnection = null;
+  let localStream = null;
+  let currentCallRecipient = null;
+  const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  const callDlg = $('#callDlg');
 
   // ---------- storage (safe) ----------
   const store = {
@@ -286,7 +309,6 @@ dialog h3{margin-bottom:4px;font-size:20px}
     ws = new WebSocket(`${proto}//${location.host}`);
     ws.onopen = () => {
       ws.send(JSON.stringify({type: 'handshake', senderId: me.id}));
-      // The server forgets groups when it restarts, so register ours again.
       Object.values(state.groups).forEach(g => {
         ws.send(JSON.stringify({type: 'create_group', groupId: g.id, groupName: g.name, members: g.members}));
       });
@@ -323,6 +345,10 @@ dialog h3{margin-bottom:4px;font-size:20px}
         if (!state.contacts[d.senderId]) state.contacts[d.senderId] = {id: d.senderId, username: d.senderName || d.senderId};
       }
       addMessage(key, {id: d.id, from: d.senderId, name: d.senderName, text: d.text, ts: d.ts});
+    } else if (d.type === 'call_signal') {
+      handleCallSignal(d);
+    } else if (d.type === 'call_status' && d.status === 'ended') {
+      endCall(false);
     }
   }
 
@@ -411,6 +437,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
     $('#chAv').className = 'avatar' + (i.group ? ' g' : '');
     $('#chName').textContent = i.name;
     $('#chSub').textContent = i.sub;
+    $('#callBtn').style.display = i.group ? 'none' : 'inline-flex';
   }
 
   function renderMessages() {
@@ -458,7 +485,6 @@ dialog h3{margin-bottom:4px;font-size:20px}
     }
 
     try {
-      // Check server to see if this user actually exists
       const res = await fetch(`/api/user-exists/${encodeURIComponent(raw)}`);
       const data = await res.json();
 
@@ -467,7 +493,6 @@ dialog h3{margin-bottom:4px;font-size:20px}
         return;
       }
 
-      // User exists -> add to local contacts and open conversation
       const validUser = data.user;
       if (!state.contacts[validUser.id]) {
         state.contacts[validUser.id] = { id: validUser.id, username: validUser.username };
@@ -489,6 +514,124 @@ dialog h3{margin-bottom:4px;font-size:20px}
       startDirect(); 
     } 
   });
+
+  // ---------- WebRTC Voice Call Logic ----------
+  $('#callBtn').onclick = async () => {
+    if (!active || active.startsWith('g:')) {
+      alert("Voice calls are supported for direct 1-on-1 chats.");
+      return;
+    }
+    const recipientId = active.slice(2);
+    currentCallRecipient = recipientId;
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      initPeerConnection(recipientId);
+      
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      ws.send(JSON.stringify({
+        type: 'call_signal',
+        recipientId: recipientId,
+        signal: { type: 'offer', offer: peerConnection.localDescription }
+      }));
+
+      $('#callTitle').textContent = `Calling ${$('#chName').textContent}...`;
+      $('#callSub').textContent = 'Ringing...';
+      $('#acceptCallBtn').hidden = true;
+      callDlg.showModal();
+
+    } catch (err) {
+      alert("Microphone access is required to make a voice call.");
+    }
+  };
+
+  function initPeerConnection(recipientId) {
+    peerConnection = new RTCPeerConnection(rtcConfig);
+
+    peerConnection.onicecandidate = event => {
+      if (event.candidate) {
+        ws.send(JSON.stringify({
+          type: 'call_signal',
+          recipientId: recipientId,
+          signal: { type: 'candidate', candidate: event.candidate }
+        }));
+      }
+    };
+
+    peerConnection.ontrack = event => {
+      $('#remoteAudio').srcObject = event.streams[0];
+    };
+  }
+
+  async function handleCallSignal(d) {
+    const signal = d.signal;
+    currentCallRecipient = d.senderId;
+
+    if (signal.type === 'offer') {
+      $('#callTitle').textContent = `Incoming Call from ${d.senderName}`;
+      $('#callSub').textContent = 'Voice Call';
+      $('#acceptCallBtn').hidden = false;
+      callDlg.showModal();
+
+      $('#acceptCallBtn').onclick = async () => {
+        $('#acceptCallBtn').hidden = true;
+        $('#callSub').textContent = 'Connected';
+
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          initPeerConnection(d.senderId);
+          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+
+          ws.send(JSON.stringify({
+            type: 'call_signal',
+            recipientId: d.senderId,
+            signal: { type: 'answer', answer: peerConnection.localDescription }
+          }));
+        } catch (err) {
+          endCall(true);
+        }
+      };
+    } else if (signal.type === 'answer') {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
+      $('#callSub').textContent = 'Connected';
+    } else if (signal.type === 'candidate') {
+      if (peerConnection) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      }
+    }
+  }
+
+  function endCall(notifyPeer = true) {
+    if (notifyPeer && currentCallRecipient && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'call_status',
+        recipientId: currentCallRecipient,
+        status: 'ended'
+      }));
+    }
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    currentCallRecipient = null;
+    if (callDlg.open) callDlg.close();
+  }
+
+  $('#endCallBtn').onclick = () => endCall(true);
 
   // ---------- groups ----------
   const dlg = $('#groupDlg');
