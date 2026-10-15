@@ -49,6 +49,16 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+// Check if a username exists
+app.get('/api/user-exists/:username', (req, res) => {
+    const userId = req.params.username.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (users[userId]) {
+        return res.json({ exists: true, user: { id: users[userId].id, username: users[userId].username } });
+    } else {
+        return res.json({ exists: false });
+    }
+});
+
 // Password Login / Registration Route
 app.post('/api/auth-password', (req, res) => {
     const { username, password } = req.body;
@@ -207,7 +217,6 @@ function broadcastPresence() {
     });
 }
 
-// Binds dynamically to Render's assigned PORT
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`Hispace Server active at port ${PORT}`);
