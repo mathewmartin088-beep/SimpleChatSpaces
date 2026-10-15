@@ -14,115 +14,211 @@
       --text-main: #e2e1e8;
       --text-muted: #8e8a9f;
       --error-red: #ff5555;
+      --badge-bg: #2a244d;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; }
 
+    /* Login Screen */
     #auth-screen {
-      position: fixed; inset: 0; background: var(--bg-dark); display: flex;
-      align-items: center; justify-content: center; z-index: 100;
+      position: fixed; inset: 0; background: radial-gradient(circle at 20% 50%, #1e173e 0%, #0d0a1b 100%);
+      display: flex; align-items: center; justify-content: center; gap: 80px; z-index: 100; padding: 40px;
     }
-    .auth-box {
-      background: var(--bg-sidebar); border: 1px solid #2a244d; border-radius: 12px;
-      padding: 32px; width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    .hero-brand { display: flex; flex-direction: column; align-items: flex-start; max-width: 420px; }
+    .eq-container { display: flex; align-items: flex-end; gap: 4px; height: 48px; margin-bottom: 20px; }
+    .eq-bar { width: 6px; background: var(--accent-gold); border-radius: 3px; animation: eqPulse 1.2s infinite ease-in-out alternate; }
+    @keyframes eqPulse { 0% { height: 15%; } 100% { height: 100%; } }
+    .eq-bar:nth-child(2n) { animation-delay: 0.2s; }
+    .eq-bar:nth-child(3n) { animation-delay: 0.4s; }
+    .eq-bar:nth-child(4n) { animation-delay: 0.1s; }
+    .brand-title { font-size: 64px; font-weight: 800; letter-spacing: -2px; color: #fff; line-height: 1; margin-bottom: 16px; }
+    .brand-sub { font-size: 18px; color: var(--text-muted); line-height: 1.5; }
+
+    .auth-card {
+      background: rgba(23, 19, 46, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px; padding: 36px; width: 400px; box-shadow: 0 16px 40px rgba(0,0,0,0.6);
     }
-    .auth-title { font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; }
+    .auth-nav { display: flex; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 8px; margin-bottom: 24px; }
+    .auth-tab { flex: 1; padding: 8px; text-align: center; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 6px; color: var(--text-muted); }
+    .auth-tab.active { background: #2b244d; color: #fff; }
+
     .input-group { margin-bottom: 16px; }
-    .input-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .input-group label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.5px; }
     .input-group input {
-      width: 100%; padding: 10px 12px; background: #0f0c1d; border: 1px solid #332d56;
-      border-radius: 6px; color: #fff; outline: none;
+      width: 100%; padding: 12px 14px; background: #0c0a18; border: 1px solid #2b244d;
+      border-radius: 8px; color: #fff; outline: none; font-size: 14px;
     }
     .input-group input:focus { border-color: var(--accent-gold); }
-    .btn {
-      width: 100%; padding: 12px; background: var(--accent-gold); color: #000;
-      border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px;
+    .btn-submit {
+      width: 100%; padding: 14px; background: var(--accent-gold); color: #000;
+      border: none; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 8px;
     }
-    .toggle-auth { text-align: center; margin-top: 12px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
-    #auth-error { color: var(--error-red); font-size: 12px; margin-top: 10px; text-align: center; display: none; }
+    #auth-error { color: var(--error-red); font-size: 13px; margin-top: 12px; text-align: center; display: none; }
 
+    /* App UI */
     #app-screen { display: flex; width: 100vw; height: 100vh; }
     
-    .server-bar { width: 72px; background: #0c0a18; display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 12px; }
-    .server-icon { width: 48px; height: 48px; border-radius: 16px; background: var(--accent-gold); color: #000; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+    .rail { width: 72px; background: #0c0a18; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 12px; }
+    .rail-btn { width: 48px; height: 48px; border-radius: 16px; background: #1c1736; color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .rail-btn.active, .rail-btn:hover { background: var(--accent-gold); color: #000; border-radius: 12px; }
 
-    .sidebar { width: 240px; background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid #252042; }
-    .server-header { padding: 16px; font-weight: bold; border-bottom: 1px solid #252042; }
-    .channels-list { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-    .channel-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
-    .channel-item.active, .channel-item:hover { background: var(--bg-hover); color: #fff; }
+    .sidebar { width: 240px; background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid #231e3d; }
+    .server-title { padding: 18px 16px; font-weight: 700; border-bottom: 1px solid #231e3d; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .section-label { padding: 16px 16px 6px; font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; }
+    
+    .channels-list { flex: 1; padding: 0 8px; overflow-y: auto; }
+    .chan-btn { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+    .chan-btn.active, .chan-btn:hover { background: var(--bg-hover); color: #fff; }
 
-    .chat-area { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
-    .chat-header { height: 56px; border-bottom: 1px solid #252042; display: flex; align-items: center; padding: 0 20px; font-weight: bold; }
-    .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+    .user-footer { padding: 12px; background: #110e24; border-top: 1px solid #231e3d; display: flex; align-items: center; gap: 10px; }
+    .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: #4a3e7d; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; color: #fff; position: relative; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #23a55a; position: absolute; bottom: 0; right: 0; border: 2px solid #110e24; }
+
+    /* Main Chat Frame */
+    .chat-frame { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
+    .chat-header { height: 56px; border-bottom: 1px solid #231e3d; display: flex; align-items: center; padding: 0 20px; font-weight: 700; font-size: 16px; gap: 8px; }
+    .chat-feed { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+
+    .hero-banner { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #292348; }
+    .hero-banner h1 { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+    .hero-banner p { color: var(--text-muted); font-size: 14px; }
+
+    .msg-row { display: flex; gap: 12px; group: relative; position: relative; padding: 4px 0; }
+    .msg-row:hover { background: rgba(255,255,255,0.01); }
+    .msg-body { flex: 1; }
+    .msg-meta { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    .msg-author { font-weight: 700; color: #fff; font-size: 14px; }
+    .msg-time { font-size: 11px; color: var(--text-muted); }
+    .msg-text { font-size: 14px; line-height: 1.5; color: var(--text-main); }
     
-    .msg { display: flex; gap: 12px; }
-    .avatar { width: 40px; height: 40px; border-radius: 50%; background: #4a3e7d; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-    .msg-content { flex: 1; }
-    .msg-header { display: flex; gap: 8px; font-size: 12px; margin-bottom: 4px; }
-    .msg-author { font-weight: bold; color: #fff; }
-    .msg-time { color: var(--text-muted); }
-    .msg-text { line-height: 1.4; color: var(--text-main); }
-    
-    .chat-input-area { padding: 16px; background: var(--bg-sidebar); }
-    .chat-input { width: 100%; padding: 12px 16px; background: #0f0c1d; border: 1px solid #332d56; border-radius: 8px; color: #fff; outline: none; }
+    /* Code & Mention Styling */
+    .msg-text code { background: #120e24; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--accent-gold); }
+    .msg-text .mention { background: rgba(245, 186, 66, 0.15); color: var(--accent-gold); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .msg-text a { color: #5865f2; text-decoration: none; }
+    .msg-text a:hover { text-decoration: underline; }
+
+    /* Reactions */
+    .reactions-bar { display: flex; gap: 4px; margin-top: 6px; }
+    .reaction-badge { background: #17132e; border: 1px solid #2d2652; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+    .input-box-container { padding: 0 20px 20px; }
+    .input-box { background: #120e24; border: 1px solid #2d2652; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; }
+    .input-box input { width: 100%; background: transparent; border: none; outline: none; color: #fff; font-size: 14px; }
+
+    /* Member List Sidebar */
+    .members-sidebar { width: 200px; background: var(--bg-sidebar); border-left: 1px solid #231e3d; padding: 16px; }
+    .member-group { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.5px; }
+    .member-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
   </style>
 </head>
 <body>
 
+  <!-- AUTH SCREEN -->
   <div id="auth-screen">
-    <div class="auth-box">
-      <div class="auth-title" id="auth-title">Welcome Back</div>
+    <div class="hero-brand">
+      <div class="eq-container">
+        <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+        <div class="eq-bar"></div><div class="eq-bar"></div>
+      </div>
+      <div class="brand-title">hispace</div>
+      <div class="brand-sub">Text and voice for your people. Your server, your data, no tracking.</div>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-nav">
+        <div class="auth-tab active" id="tab-login" onclick="setAuthMode(false)">Sign in</div>
+        <div class="auth-tab" id="tab-register" onclick="setAuthMode(true)">Create account</div>
+      </div>
+
       <div class="input-group">
         <label>USERNAME</label>
-        <input type="text" id="username-input" placeholder="Enter username">
+        <input type="text" id="auth-user" placeholder="Enter your username">
       </div>
       <div class="input-group">
         <label>PASSWORD</label>
-        <input type="password" id="password-input" placeholder="Enter password">
+        <input type="password" id="auth-pass" placeholder="Enter your password">
       </div>
-      <button class="btn" onclick="submitAuth()">Sign In</button>
+
+      <button class="btn-submit" id="auth-btn" onclick="submitAuth()">Sign in</button>
       <div id="auth-error"></div>
-      <div class="toggle-auth" onclick="toggleAuthMode()" id="auth-toggle">Need an account? Register</div>
     </div>
   </div>
 
+  <!-- MAIN APP -->
   <div id="app-screen" style="display: none;">
-    <div class="server-bar">
-      <div class="server-icon">NO</div>
+    <!-- SERVER RAIL -->
+    <div class="rail">
+      <div class="rail-btn active">NO</div>
     </div>
 
+    <!-- CHANNELS SIDEBAR -->
     <div class="sidebar">
-      <div class="server-header">Night Owls</div>
+      <div class="server-title">Night Owls</div>
+      
+      <div class="section-label">TEXT CHANNELS</div>
       <div class="channels-list" id="channels-list"></div>
+
+      <div class="section-label">VOICE CHANNELS</div>
+      <div style="padding: 0 8px;">
+        <div class="chan-btn">🔊 Lounge</div>
+      </div>
+
+      <div class="user-footer">
+        <div class="user-avatar" id="my-avatar">? <div class="status-dot"></div></div>
+        <div style="flex: 1; overflow: hidden;">
+          <div style="font-weight: 700; font-size: 13px;" id="my-username">User</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Online</div>
+        </div>
+      </div>
     </div>
 
-    <div class="chat-area">
-      <div class="chat-header" id="current-channel-name"># general</div>
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-area">
-        <input type="text" class="chat-input" id="message-input" placeholder="Message #general" onkeypress="handleKeyPress(event)">
+    <!-- CHAT AREA -->
+    <div class="chat-frame">
+      <div class="chat-header" id="chat-header-title"># general</div>
+      
+      <div class="chat-feed" id="chat-feed">
+        <div class="hero-banner">
+          <h1 id="hero-title">Welcome to #general</h1>
+          <p>This is the start of the channel.</p>
+        </div>
+        <div id="messages-container"></div>
+      </div>
+
+      <div class="input-box-container">
+        <div class="input-box">
+          <input type="text" id="chat-input" placeholder="Message #general" onkeypress="handleKeyPress(event)">
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMBER LIST -->
+    <div class="members-sidebar">
+      <div class="member-group">ONLINE — 1</div>
+      <div class="member-item">
+        <div class="user-avatar" style="width:28px; height:28px; font-size:11px;">A <div class="status-dot"></div></div>
+        <span id="member-me">alice</span>
       </div>
     </div>
   </div>
 
   <script>
-    let isRegister = false;
+    let isRegisterMode = false;
     let currentUser = null;
     let activeChannel = 'general';
     let ws = null;
 
-    function toggleAuthMode() {
-      isRegister = !isRegister;
-      document.getElementById('auth-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
-      document.getElementById('auth-toggle').innerText = isRegister ? 'Already have an account? Sign In' : 'Need an account? Register';
+    function setAuthMode(register) {
+      isRegisterMode = register;
+      document.getElementById('tab-login').classList.toggle('active', !register);
+      document.getElementById('tab-register').classList.toggle('active', register);
+      document.getElementById('auth-btn').innerText = register ? 'Create account' : 'Sign in';
       document.getElementById('auth-error').style.display = 'none';
     }
 
     async function submitAuth() {
-      const username = document.getElementById('username-input').value.trim();
-      const password = document.getElementById('password-input').value.trim();
+      const username = document.getElementById('auth-user').value.trim();
+      const password = document.getElementById('auth-pass').value.trim();
       const errBox = document.getElementById('auth-error');
       errBox.style.display = 'none';
 
@@ -132,38 +228,42 @@
         return;
       }
 
-      const endpoint = isRegister ? '/api/register' : '/api/login';
-      
+      const endpoint = isRegisterMode ? '/api/register' : '/api/login';
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
         });
-
         const data = await res.json();
+
         if (res.ok && data.success) {
           currentUser = data.username;
           document.getElementById('auth-screen').style.display = 'none';
           document.getElementById('app-screen').style.display = 'flex';
+          
+          document.getElementById('my-username').innerText = currentUser;
+          document.getElementById('my-avatar').childNodes[0].nodeValue = currentUser.charAt(0).toUpperCase() + ' ';
+          document.getElementById('member-me').innerText = currentUser;
+
           initApp();
         } else {
-          errBox.innerText = data.error || 'Authentication failed.';
+          errBox.innerText = data.error || 'Authentication failed';
           errBox.style.display = 'block';
         }
       } catch (err) {
-        errBox.innerText = 'Server connection failed.';
+        errBox.innerText = 'Could not connect to server.';
         errBox.style.display = 'block';
       }
     }
 
     function initApp() {
-      initWebSocket();
+      connectWebSocket();
       loadChannels();
       loadMessages(activeChannel);
     }
 
-    function initWebSocket() {
+    function connectWebSocket() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new WebSocket(`${protocol}//${location.host}`);
 
@@ -171,10 +271,10 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'new_message' && data.message.channel_id === activeChannel) {
-            appendMessage(data.message);
+            renderSingleMessage(data.message);
           }
         } catch (e) {
-          console.error('Error parsing WebSocket message:', e);
+          console.error('WS error:', e);
         }
       };
     }
@@ -183,67 +283,78 @@
       try {
         const res = await fetch('/api/channels');
         const channels = await res.json();
-        const container = document.getElementById('channels-list');
-        container.innerHTML = '';
-        channels.forEach(ch => {
+        const list = document.getElementById('channels-list');
+        list.innerHTML = '';
+
+        channels.filter(c => c.type === 'text').forEach(ch => {
           const div = document.createElement('div');
-          div.className = `channel-item ${ch.id === activeChannel ? 'active' : ''}`;
+          div.className = `chan-btn ${ch.id === activeChannel ? 'active' : ''}`;
           div.innerText = `# ${ch.name}`;
           div.onclick = () => switchChannel(ch.id, ch.name);
-          container.appendChild(div);
+          list.appendChild(div);
         });
-      } catch (err) {
-        console.error('Failed to load channels:', err);
+      } catch (e) {
+        console.error('Channels error:', e);
       }
     }
 
     function switchChannel(id, name) {
       activeChannel = id;
-      document.getElementById('current-channel-name').innerText = `# ${name}`;
-      document.getElementById('message-input').placeholder = `Message #${name}`;
+      document.getElementById('chat-header-title').innerText = `# ${name}`;
+      document.getElementById('hero-title').innerText = `Welcome to #${name}`;
+      document.getElementById('chat-input').placeholder = `Message #${name}`;
       loadChannels();
       loadMessages(id);
     }
 
     async function loadMessages(channelId) {
-      if (!channelId) return;
       try {
         const res = await fetch(`/api/messages/${channelId}`);
         const messages = await res.json();
-        const container = document.getElementById('chat-messages');
+        const container = document.getElementById('messages-container');
         container.innerHTML = '';
         if (Array.isArray(messages)) {
-          messages.forEach(appendMessage);
+          messages.forEach(renderSingleMessage);
         }
-      } catch (err) {
-        console.error('Failed to load chat history:', err);
+      } catch (e) {
+        console.error('Messages load error:', e);
       }
     }
 
-    function appendMessage(msg) {
-      const container = document.getElementById('chat-messages');
+    function parseMarkdown(text) {
+      let safe = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
+      safe = safe.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+      safe = safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+      return safe;
+    }
+
+    function renderSingleMessage(msg) {
+      const container = document.getElementById('messages-container');
       const div = document.createElement('div');
-      div.className = 'msg';
+      div.className = 'msg-row';
       const initial = (msg.username || '?').charAt(0).toUpperCase();
       const time = new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       div.innerHTML = `
-        <div class="avatar">${initial}</div>
-        <div class="msg-content">
-          <div class="msg-header">
+        <div class="user-avatar">${initial}</div>
+        <div class="msg-body">
+          <div class="msg-meta">
             <span class="msg-author">${msg.username}</span>
             <span class="msg-time">${time}</span>
           </div>
-          <div class="msg-text">${msg.content}</div>
+          <div class="msg-text">${parseMarkdown(msg.content)}</div>
         </div>
       `;
+
       container.appendChild(div);
-      container.scrollTop = container.scrollHeight;
+      const feed = document.getElementById('chat-feed');
+      feed.scrollTop = feed.scrollHeight;
     }
 
     function handleKeyPress(e) {
       if (e.key === 'Enter') {
-        const input = document.getElementById('message-input');
+        const input = document.getElementById('chat-input');
         const content = input.value.trim();
         if (content && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
