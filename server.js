@@ -12,7 +12,6 @@ app.use(express.json());
 
 const USERS_FILE = path.join(__dirname, 'users.json');
 
-// Load users from users.json file on startup
 let users = {};
 if (fs.existsSync(USERS_FILE)) {
     try {
@@ -26,9 +25,7 @@ if (fs.existsSync(USERS_FILE)) {
 
 function saveUsersToFile() {
     fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8', (err) => {
-        if (err) {
-            console.error("[HISPACE] Error saving users to file:", err.message);
-        }
+        if (err) console.error("[HISPACE] Error saving users to file:", err.message);
     });
 }
 
@@ -48,7 +45,7 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-// Check if a username exists
+// Check user existence endpoint
 app.get('/api/user-exists/:username', (req, res) => {
     const userId = req.params.username.toLowerCase().replace(/[^a-z0-9]/g, '_');
     if (users[userId]) {
@@ -61,9 +58,7 @@ app.get('/api/user-exists/:username', (req, res) => {
 // Password Login / Registration Route
 app.post('/api/auth-password', (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ error: "Username and password required" });
-    }
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
 
     const userId = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
     const passHash = hashPassword(password);
@@ -75,29 +70,20 @@ app.post('/api/auth-password', (req, res) => {
             return res.status(401).json({ error: "Incorrect password" });
         }
     } else {
-        users[userId] = {
-            id: userId,
-            username: username,
-            passwordHash: passHash,
-            email: null
-        };
+        users[userId] = { id: userId, username, passwordHash: passHash, email: null };
         saveUsersToFile();
         console.log(`[HISPACE REGISTER] Created user: ${username} (saved to users.json)`);
         return res.json({ success: true, user: users[userId] });
     }
 });
 
-// Passcode Request via Email
+// OTP Request Route
 app.post('/api/request-otp', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     otps[email] = code;
-
-    console.log(`\n========================================`);
-    console.log(` [HISPACE OTP CODE] for ${email}: ${code}`);
-    console.log(`========================================\n`);
 
     try {
         await transporter.sendMail({
@@ -109,11 +95,11 @@ app.post('/api/request-otp', async (req, res) => {
         res.json({ success: true, message: "Passcode sent!" });
     } catch (err) {
         console.error("Email send error:", err.message);
-        res.json({ success: true, message: "Code generated (check terminal if email fails)." });
+        res.json({ success: true, message: "Code generated." });
     }
 });
 
-// Verify OTP
+// Verify OTP Route
 app.post('/api/verify-otp', (req, res) => {
     const { email, code, username } = req.body;
     if (otps[email] && otps[email] === code) {
@@ -121,12 +107,7 @@ app.post('/api/verify-otp', (req, res) => {
         const userId = (username || email.split('@')[0]).toLowerCase().replace(/[^a-z0-9]/g, '_');
         
         if (!users[userId]) {
-            users[userId] = {
-                id: userId,
-                username: username || email.split('@')[0],
-                passwordHash: null,
-                email: email
-            };
+            users[userId] = { id: userId, username: username || email.split('@')[0], passwordHash: null, email };
         } else {
             users[userId].email = email;
         }
@@ -156,19 +137,11 @@ wss.on('connection', (ws) => {
             }
 
             if (data.type === 'create_group') {
-                groups[data.groupId] = {
-                    id: data.groupId,
-                    name: data.groupName,
-                    members: data.members
-                };
-                
+                groups[data.groupId] = { id: data.groupId, name: data.groupName, members: data.members };
                 data.members.forEach(memberId => {
                     const target = clients.get(memberId);
                     if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({
-                            type: 'group_created',
-                            group: groups[data.groupId]
-                        }));
+                        target.send(JSON.stringify({ type: 'group_created', group: groups[data.groupId] }));
                     }
                 });
                 return;
@@ -188,7 +161,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // WebRTC Call Status Signals (End, Reject)
+            // WebRTC Call Status Signals
             if (data.type === 'call_status') {
                 const targetSocket = clients.get(data.recipientId);
                 if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
@@ -232,18 +205,11 @@ wss.on('connection', (ws) => {
 
 function broadcastPresence() {
     const activeUsers = Array.from(clients.keys()).map(id => users[id] || { id, username: id });
-    const payload = JSON.stringify({
-        type: 'presence',
-        users: activeUsers
-    });
+    const payload = JSON.stringify({ type: 'presence', users: activeUsers });
     clients.forEach((socket) => {
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send(payload);
-        }
+        if (socket.readyState === WebSocket.OPEN) socket.send(payload);
     });
 }
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log(`Hispace Server active at port ${PORT}`);
-});
+http.listen(PORT, () => console.log(`Hispace Server active on port ${PORT}`));
