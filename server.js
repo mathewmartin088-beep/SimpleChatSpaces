@@ -1,225 +1,164 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
+const http = require('http');
 const WebSocket = require('ws');
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
-const fs = require('fs');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
 const path = require('path');
 
-app.use(express.static('public'));
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+const PORT = process.env.PORT || 3100;
+
+// Connect to SQLite Database file (creates hispace.db locally if it doesn't exist)
+const db = new sqlite3.Database('./hispace.db', (err) => {
+  if (err) console.error('Database connection error:', err.message);
+  else console.log('Connected to SQLite persistent database.');
+});
+
+// Initialize Tables
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS channels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'text',
+    server_id TEXT NOT NULL DEFAULT 'main'
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reactions TEXT DEFAULT '{}'
+  )`);
+
+  // Seed default channels if empty
+  db.get('SELECT COUNT(*) as count FROM channels', (err, row) => {
+    if (row && row.count === 0) {
+      db.run(`INSERT INTO channels (id, name, type) VALUES ('general', 'general', 'text')`);
+      db.run(`INSERT INTO channels (id, name, type) VALUES ('random', 'random', 'text')`);
+      db.run(`INSERT INTO channels (id, name, type) VALUES ('lounge', 'Lounge', 'voice')`);
+    }
+  });
+});
+
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-const USERS_FILE = path.join(__dirname, 'users.json');
+// Authentication Routes
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
 
-let users = {};
-if (fs.existsSync(USERS_FILE)) {
-    try {
-        users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-        console.log(`[HISPACE] Loaded ${Object.keys(users).length} account(s) from users.json`);
-    } catch (err) {
-        console.error("Error loading users.json:", err.message);
-        users = {};
+  const hash = await bcrypt.hash(password, 10);
+  db.run('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash], function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Username already taken.' });
+      return res.status(500).json({ error: 'Database error.' });
     }
-}
-
-function saveUsersToFile() {
-    fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8', (err) => {
-        if (err) console.error("[HISPACE] Error saving users to file:", err.message);
-    });
-}
-
-const otps = {};
-const clients = new Map();
-const groups = {};
-
-// Active Voice Channels Map: roomId -> Map(userId -> socket)
-const voiceChannels = new Map();
-
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: 'mathewmartin088@gmail.com', 
-        pass: 'huys rxde icfc lica'     
-    }
+    res.json({ success: true, username });
+  });
 });
 
-function hashPassword(password) {
-    return crypto.createHash('sha256').update(password).digest('hex');
-}
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
+    if (err || !user) return res.status(400).json({ error: 'Invalid credentials.' });
+    
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.status(400).json({ error: 'Invalid credentials.' });
 
-// Check user existence endpoint
-app.get('/api/user-exists/:username', (req, res) => {
-    const userId = req.params.username.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    if (users[userId]) {
-        return res.json({ exists: true, user: { id: users[userId].id, username: users[userId].username } });
-    } else {
-        return res.json({ exists: false });
-    }
+    res.json({ success: true, username: user.username });
+  });
 });
 
-// Password Login / Registration Route
-app.post('/api/auth-password', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
-
-    const userId = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const passHash = hashPassword(password);
-
-    if (users[userId]) {
-        if (users[userId].passwordHash === passHash) {
-            return res.json({ success: true, user: users[userId] });
-        } else {
-            return res.status(401).json({ error: "Incorrect password" });
-        }
-    } else {
-        users[userId] = { id: userId, username, passwordHash: passHash, email: null };
-        saveUsersToFile();
-        console.log(`[HISPACE REGISTER] Created user: ${username} (saved to users.json)`);
-        return res.json({ success: true, user: users[userId] });
-    }
+// REST API Endpoints for Channels & Global Chat History
+app.get('/api/channels', (req, res) => {
+  db.all('SELECT * FROM channels', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch channels' });
+    res.json(rows);
+  });
 });
 
-// WebSocket Server
-const wss = new WebSocket.Server({ server: http });
+// Returns full history for any device joining a channel
+app.get('/api/messages/:channelId', (req, res) => {
+  db.all(
+    'SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at ASC',
+    [req.params.channelId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch history' });
+      const formatted = rows.map(r => ({
+        ...r,
+        reactions: JSON.parse(r.reactions || '{}')
+      }));
+      res.json(formatted);
+    }
+  );
+});
+
+// WebSocket Real-time Messaging
+const clients = new Set();
 
 wss.on('connection', (ws) => {
-    let currentUserId = null;
-    let currentVoiceRoom = null;
+  clients.add(ws);
 
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
+  ws.on('message', (messageRaw) => {
+    try {
+      const data = JSON.parse(messageRaw);
 
-            if (data.type === 'handshake') {
-                currentUserId = data.senderId;
-                clients.set(currentUserId, ws);
-                broadcastPresence();
-                return;
-            }
+      if (data.type === 'chat_message') {
+        const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+        const timestamp = new Date().toISOString();
 
-            if (data.type === 'create_group') {
-                groups[data.groupId] = { id: data.groupId, name: data.groupName, members: data.members };
-                data.members.forEach(memberId => {
-                    const target = clients.get(memberId);
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({ type: 'group_created', group: groups[data.groupId] }));
-                    }
-                });
-                return;
-            }
-
-            // JOIN VOICE ROOM
-            if (data.type === 'join_voice_room') {
-                currentVoiceRoom = data.roomId;
-                if (!voiceChannels.has(currentVoiceRoom)) {
-                    voiceChannels.set(currentVoiceRoom, new Map());
+        // 1. Save directly to DB first
+        db.run(
+          'INSERT INTO messages (id, channel_id, username, content, created_at, reactions) VALUES (?, ?, ?, ?, ?, ?)',
+          [msgId, data.channelId, data.username, data.content, timestamp, '{}'],
+          (err) => {
+            if (!err) {
+              // 2. Broadcast to all connected clients across devices
+              broadcast({
+                type: 'new_message',
+                message: {
+                  id: msgId,
+                  channel_id: data.channelId,
+                  username: data.username,
+                  content: data.content,
+                  created_at: timestamp,
+                  reactions: {}
                 }
-                voiceChannels.get(currentVoiceRoom).set(currentUserId, ws);
-                broadcastVoiceRoomState(currentVoiceRoom);
-                return;
+              });
             }
+          }
+        );
+      }
+    } catch (e) {
+      console.error('WS Error:', e);
+    }
+  });
 
-            // LEAVE VOICE ROOM
-            if (data.type === 'leave_voice_room') {
-                leaveVoiceRoom(currentUserId, currentVoiceRoom);
-                currentVoiceRoom = null;
-                return;
-            }
-
-            // BROADCAST VOICE AUDIO CHUNK
-            if (data.type === 'voice_chunk') {
-                if (currentVoiceRoom && voiceChannels.has(currentVoiceRoom)) {
-                    const roomMembers = voiceChannels.get(currentVoiceRoom);
-                    const audioPayload = JSON.stringify({
-                        type: 'voice_stream',
-                        senderId: currentUserId,
-                        senderName: users[currentUserId]?.username || currentUserId,
-                        audio: data.audio
-                    });
-
-                    roomMembers.forEach((memberWs, memberId) => {
-                        if (memberId !== currentUserId && memberWs.readyState === WebSocket.OPEN) {
-                            memberWs.send(audioPayload);
-                        }
-                    });
-                }
-                return;
-            }
-
-            // DIRECT OR GROUP TEXT MESSAGES
-            if (data.recipientId) {
-                const targetSocket = clients.get(data.recipientId);
-                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                    targetSocket.send(JSON.stringify(data));
-                }
-            } else if (data.groupId && groups[data.groupId]) {
-                groups[data.groupId].members.forEach(memberId => {
-                    if (memberId !== currentUserId) {
-                        const memberSocket = clients.get(memberId);
-                        if (memberSocket && memberSocket.readyState === WebSocket.OPEN) {
-                            memberSocket.send(JSON.stringify(data));
-                        }
-                    }
-                });
-            }
-
-        } catch (err) {
-            console.error("Payload routing error:", err);
-        }
-    });
-
-    ws.on('close', () => {
-        if (currentUserId) {
-            clients.delete(currentUserId);
-            if (currentVoiceRoom) {
-                leaveVoiceRoom(currentUserId, currentVoiceRoom);
-            }
-            broadcastPresence();
-        }
-    });
+  ws.on('close', () => clients.delete(ws));
 });
 
-function leaveVoiceRoom(userId, roomId) {
-    if (roomId && voiceChannels.has(roomId)) {
-        const room = voiceChannels.get(roomId);
-        room.delete(userId);
-        if (room.size === 0) {
-            voiceChannels.delete(roomId);
-        } else {
-            broadcastVoiceRoomState(roomId);
-        }
+function broadcast(data) {
+  const payload = JSON.stringify(data);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
     }
+  }
 }
 
-function broadcastVoiceRoomState(roomId) {
-    if (!voiceChannels.has(roomId)) return;
-    const roomMembers = voiceChannels.get(roomId);
-    const memberList = Array.from(roomMembers.keys()).map(id => ({
-        id,
-        username: users[id]?.username || id
-    }));
-
-    const payload = JSON.stringify({
-        type: 'voice_room_members',
-        roomId: roomId,
-        members: memberList
-    });
-
-    roomMembers.forEach((socket) => {
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send(payload);
-        }
-    });
-}
-
-function broadcastPresence() {
-    const activeUsers = Array.from(clients.keys()).map(id => users[id] || { id, username: id });
-    const payload = JSON.stringify({ type: 'presence', users: activeUsers });
-    clients.forEach((socket) => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(payload);
-    });
-}
-
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Hispace Server active on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Server active on port ${PORT}. History synced across devices.`);
+});
