@@ -175,6 +175,33 @@ wss.on('connection', (ws) => {
                 return;
             }
 
+            // WebRTC Voice Call Signaling
+            if (data.type === 'call_signal') {
+                const targetSocket = clients.get(data.recipientId);
+                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+                    targetSocket.send(JSON.stringify({
+                        type: 'call_signal',
+                        senderId: currentUserId,
+                        senderName: users[currentUserId]?.username || currentUserId,
+                        signal: data.signal
+                    }));
+                }
+                return;
+            }
+
+            // WebRTC Call Status Signals (End, Reject)
+            if (data.type === 'call_status') {
+                const targetSocket = clients.get(data.recipientId);
+                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+                    targetSocket.send(JSON.stringify({
+                        type: 'call_status',
+                        senderId: currentUserId,
+                        status: data.status
+                    }));
+                }
+                return;
+            }
+
             if (data.recipientId) {
                 const targetSocket = clients.get(data.recipientId);
                 if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
