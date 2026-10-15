@@ -226,7 +226,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
     set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
     del(k){ try { localStorage.removeItem(k); } catch {} }
   };
-  const saveState = () => store.set('hispace:data:' + me.id, state);
+  const saveState = () => { if (me && me.id) store.set('hispace:data:' + me.id, state); };
   const toId = n => n.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
   // ---------- helpers ----------
@@ -249,7 +249,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
   };
 
   $('#loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
+    e.preventDefault(); // Stop page refresh
     const btn = $('#loginBtn'), err = $('#loginErr');
     err.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
     try {
@@ -260,6 +260,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Could not sign in');
+      
       store.set(SESSION_KEY, {id: data.user.id, username: data.user.username});
       $('#p').value = '';
       startApp(data.user);
@@ -284,14 +285,28 @@ dialog h3{margin-bottom:4px;font-size:20px}
 
   // ---------- app start ----------
   function startApp(user) {
+    if (!user || !user.id) return;
     me = {id: user.id, username: user.username};
-    state = store.get('hispace:data:' + me.id) || {contacts: {}, groups: {}, msgs: {}, unread: {}, last: {}};
-    state.contacts = state.contacts || {}; state.groups = state.groups || {};
-    state.msgs = state.msgs || {}; state.unread = state.unread || {}; state.last = state.last || {};
-    $('#login').hidden = true; $('#app').hidden = false;
+    
+    let loadedState = store.get('hispace:data:' + me.id);
+    if (!loadedState || typeof loadedState !== 'object') {
+      loadedState = {contacts: {}, groups: {}, msgs: {}, unread: {}, last: {}};
+    }
+    
+    state = loadedState;
+    state.contacts = state.contacts || {}; 
+    state.groups = state.groups || {};
+    state.msgs = state.msgs || {}; 
+    state.unread = state.unread || {}; 
+    state.last = state.last || {};
+    
+    $('#login').hidden = true; 
+    $('#app').hidden = false;
     $('#meAv').textContent = initial(me.username);
     $('#meName').textContent = me.username;
-    active = null; showChat();
+    
+    active = null; 
+    showChat();
     renderList();
     manualClose = false;
     connect();
@@ -408,4 +423,306 @@ dialog h3{margin-bottom:4px;font-size:20px}
     meta.append(top);
     const lt = lastText(c.key);
     const bottom = el('div', 'top');
-    bottom.append(el('div', 'last', lt || (c.group ? '
+    bottom.append(el('div', 'last', lt || (c.group ? 'Group' : (online.has(c.id) ? 'Online' : 'Offline'))));
+    if (state.unread[c.key]) bottom.append(el('span', 'badge', state.unread[c.key]));
+    meta.append(bottom);
+    b.append(meta);
+    b.onclick = () => openConv(c.key);
+    return b;
+  }
+
+  // ---------- chat view ----------
+  function openConv(key) {
+    active = key; state.unread[key] = 0; saveState();
+    showChat(); renderList(); renderHeader(); renderMessages();
+    $('#app').classList.add('chat-open');
+    $('#text').focus();
+  }
+
+  function showChat() {
+    const on = !!active;
+    $('#none').hidden = on;
+    const chat = $('#chat'); chat.hidden = !on; chat.style.display = on ? 'flex' : 'none';
+  }
+
+  function activeInfo() {
+    if (!active) return null;
+    const [t, id] = [active.slice(0,1), active.slice(2)];
+    if (t === 'g') { const g = state.groups[id]; return g && {name: g.name, group: true, sub: g.members.length + ' members'}; }
+    const c = state.contacts[id]; return c && {name: c.username, group: false, sub: online.has(id) ? 'Online' : 'Offline'};
+  }
+
+  function renderHeader() {
+    const i = activeInfo(); if (!i) return;
+    $('#chAv').textContent = initial(i.name);
+    $('#chAv').className = 'avatar' + (i.group ? ' g' : '');
+    $('#chName').textContent = i.name;
+    $('#chSub').textContent = i.sub;
+    
+    const canonicalRoomId = getVoiceRoomId(active);
+    if (activeVoiceRoom === canonicalRoomId) {
+      $('#voiceToggleBtn').textContent = 'Disconnect Voice';
+      $('#voiceToggleBtn').style.background = 'var(--danger)';
+      $('#voiceToggleBtn').style.color = '#fff';
+    } else {
+      $('#voiceToggleBtn').textContent = '🎙️ Join Voice Channel';
+      $('#voiceToggleBtn').style.background = 'var(--amber)';
+      $('#voiceToggleBtn').style.color = 'var(--amber-ink)';
+    }
+  }
+
+  function renderMessages() {
+    const box = $('#msgs'); box.replaceChildren();
+    const arr = state.msgs[active] || [];
+    const isGroup = active.startsWith('g:');
+    let lastDay = '';
+    arr.forEach(m => {
+      const day = fmtDay(m.ts);
+      if (day !== lastDay) { box.append(el('div', 'day', day)); lastDay = day; }
+      const mine = m.from === me.id;
+      const b = el('div', 'msg' + (mine ? ' mine' : ''));
+      if (isGroup && !mine) b.append(el('div', 'from', m.name || m.from));
+      b.append(el('div', 'txt', m.text));
+      b.append(el('div', 'ts', fmtTime(m.ts)));
+      box.append(b);
+    });
+    box.scrollTop = box.scrollHeight;
+  }
+
+  $('#back').onclick = () => { $('#app').classList.remove('chat-open'); active = null; showChat(); renderList(); };
+
+  $('#composer').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('#text'); const text = input.value.trim();
+    if (!text || !active) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) { $('#banner').hidden = false; return; }
+    
+    const base = {type: 'message', id: uid(), senderId: me.id, senderName: me.username, text, ts: Date.now()};
+    const id = active.slice(2);
+    
+    if (active.startsWith('g:')) {
+      base.groupId = id;
+    } else {
+      base.recipientId = id;
+    }
+
+    ws.send(JSON.stringify(base));
+    addMessage(active, {id: base.id, from: me.id, name: me.username, text, ts: base.ts});
+    input.value = '';
+  });
+
+  // ---------- new chat by username ----------
+  async function startDirect() {
+    const raw = $('#newUser').value.trim(); 
+    if (!raw) return;
+    
+    const id = toId(raw);
+    if (id === me.id) { 
+      alert("You cannot start a DM with yourself.");
+      $('#newUser').value = ''; 
+      return; 
+    }
+
+    try {
+      const res = await fetch(`/api/user-exists/${encodeURIComponent(raw)}`);
+      const data = await res.json();
+
+      if (!data.exists) {
+        alert(`User "${raw}" not found.`);
+        return;
+      }
+
+      const validUser = data.user;
+      if (!state.contacts[validUser.id]) {
+        state.contacts[validUser.id] = { id: validUser.id, username: validUser.username };
+      }
+      
+      $('#newUser').value = ''; 
+      saveState(); 
+      openConv('u:' + validUser.id);
+
+    } catch (err) {
+      alert("Error checking username. Please check your network connection.");
+    }
+  }
+
+  $('#startChat').onclick = startDirect;
+  $('#newUser').addEventListener('keydown', e => { 
+    if (e.key === 'Enter') { 
+      e.preventDefault(); 
+      startDirect(); 
+    } 
+  });
+
+  function getVoiceRoomId(activeKey) {
+    if (!activeKey) return null;
+    if (activeKey.startsWith('g:')) return activeKey;
+    const otherId = activeKey.slice(2);
+    const sorted = [me.id, otherId].sort();
+    return `dm_${sorted[0]}_${sorted[1]}`;
+  }
+
+  // ---------- VOICE CHANNEL STREAMING ----------
+  $('#voiceToggleBtn').onclick = () => {
+    const canonicalRoomId = getVoiceRoomId(active);
+    if (activeVoiceRoom === canonicalRoomId) {
+      leaveVoiceRoom();
+    } else {
+      joinVoiceRoom(canonicalRoomId);
+    }
+  };
+
+  $('#leaveVoiceBtn').onclick = () => leaveVoiceRoom();
+
+  async function joinVoiceRoom(roomId) {
+    leaveVoiceRoom();
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      activeVoiceRoom = roomId;
+
+      const roomName = $('#chName').textContent;
+      $('#voiceRoomTitle').textContent = `Voice Channel: ${roomName}`;
+      $('#voiceBar').hidden = false;
+      renderHeader();
+
+      ws.send(JSON.stringify({ type: 'join_voice_room', roomId: activeVoiceRoom }));
+
+      const txAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const source = txAudioCtx.createMediaStreamSource(micStream);
+      audioProcNode = txAudioCtx.createScriptProcessor(2048, 1, 1);
+
+      audioProcNode.onaudioprocess = (e) => {
+        if (!activeVoiceRoom || !ws || ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        const pcm16 = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+        }
+
+        let binary = '';
+        const bytes = new Uint8Array(pcm16.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Audio = btoa(binary);
+
+        ws.send(JSON.stringify({
+          type: 'voice_chunk',
+          audio: base64Audio
+        }));
+      };
+
+      source.connect(audioProcNode);
+      audioProcNode.connect(txAudioCtx.destination);
+
+    } catch (err) {
+      alert("Microphone permission required to join voice channel.");
+    }
+  }
+
+  function leaveVoiceRoom() {
+    if (activeVoiceRoom) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'leave_voice_room' }));
+      }
+      activeVoiceRoom = null;
+    }
+
+    if (audioProcNode) {
+      try { audioProcNode.disconnect(); } catch(e){}
+      audioProcNode = null;
+    }
+
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      micStream = null;
+    }
+
+    $('#voiceBar').hidden = true;
+    renderHeader();
+  }
+
+  function playPCMChunk(base64Audio) {
+    try {
+      if (!rxAudioCtx) {
+        rxAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        nextPlayTime = rxAudioCtx.currentTime;
+      }
+
+      if (rxAudioCtx.state === 'suspended') {
+        rxAudioCtx.resume();
+      }
+
+      const binary = atob(base64Audio);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / 32768.0;
+      }
+
+      const buffer = rxAudioCtx.createBuffer(1, float32.length, 16000);
+      buffer.getChannelData(0).set(float32);
+
+      const source = rxAudioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(rxAudioCtx.destination);
+
+      const now = rxAudioCtx.currentTime;
+      if (nextPlayTime < now) {
+        nextPlayTime = now;
+      }
+
+      source.start(nextPlayTime);
+      nextPlayTime += buffer.duration;
+
+    } catch(e){
+      console.error("PCM Audio playback error:", e);
+    }
+  }
+
+  // ---------- groups ----------
+  const dlg = $('#groupDlg');
+  $('#newGroup').onclick = () => {
+    const pick = $('#gpick'); pick.replaceChildren();
+    const people = Object.values(state.contacts);
+    if (!people.length) pick.append(el('div', 'empty-list', 'Start a chat with someone first, then add them to a group.'));
+    people.forEach(c => {
+      const l = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = c.id;
+      l.append(cb, document.createTextNode(c.username + (online.has(c.id) ? '  (online)' : '')));
+      pick.append(l);
+    });
+    $('#gname').value = '';
+    dlg.showModal(); $('#gname').focus();
+  };
+  $('#gcancel').onclick = () => dlg.close();
+  $('#groupForm').addEventListener('submit', e => {
+    const name = $('#gname').value.trim();
+    const members = [...$('#gpick').querySelectorAll('input:checked')].map(i => i.value);
+    if (!name || !members.length) { e.preventDefault(); return; }
+    members.unshift(me.id);
+    const groupId = 'g_' + uid();
+    const group = {id: groupId, name, members};
+    state.groups[groupId] = group; saveState();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({type: 'create_group', groupId, groupName: name, members}));
+    }
+    setTimeout(() => openConv('g:' + groupId), 0);
+  });
+
+  // ---------- auto sign-in ----------
+  try {
+    const saved = store.get(SESSION_KEY);
+    if (saved && saved.id) startApp(saved);
+  } catch (e) {
+    store.del(SESSION_KEY);
+  }
+})();
+</script>
+</body>
+</html>
