@@ -94,6 +94,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(
 .composer .btn{border-radius:99px;padding:12px 22px}
 .offline-banner{background:#fbe9c9;color:#5d3d07;padding:6px 18px;font-size:13.5px;text-align:center}
 
+/* Voice Bar Banner */
+.voice-bar{background:var(--deep-3);color:#fff;padding:8px 18px;display:flex;align-items:center;justify-content:space-between;font-size:13.5px}
+
 dialog{border:0;border-radius:16px;padding:24px;width:min(400px,92vw);margin:auto;box-shadow:0 20px 60px #0006}
 dialog::backdrop{background:#10303a99}
 dialog h3{margin-bottom:4px;font-size:20px}
@@ -165,13 +168,20 @@ dialog h3{margin-bottom:4px;font-size:20px}
 
   <main>
     <div id="banner" class="offline-banner" hidden>Reconnecting to the server…</div>
+    
+    <!-- VOICE CHANNEL ACTIVE BAR -->
+    <div id="voiceBar" class="voice-bar" hidden>
+      <div><strong id="voiceRoomTitle">Voice Channel</strong> — <span id="voiceMembers">1 member connected</span></div>
+      <button class="btn ghost" id="leaveVoiceBtn" style="background:var(--danger);color:#fff;padding:4px 12px;font-size:12px">Leave Voice</button>
+    </div>
+
     <div class="placeholder" id="none"><div><b>Pick a conversation</b>Choose someone from the list, or type a username to start a new chat.</div></div>
     <div id="chat" hidden style="display:none;flex-direction:column;flex:1;min-height:0">
       <div class="chat-head">
         <button class="back" id="back" aria-label="Back to conversations">‹</button>
         <div class="avatar" id="chAv"></div>
         <div><h3 id="chName"></h3><small id="chSub"></small></div>
-        <button class="btn amber" id="callBtn" title="Start Voice Call" style="margin-left: auto;">📞 Call</button>
+        <button class="btn amber" id="voiceToggleBtn" style="margin-left:auto">🎙️ Join Voice Channel</button>
       </div>
       <div id="msgs"></div>
       <form class="composer" id="composer">
@@ -181,19 +191,6 @@ dialog h3{margin-bottom:4px;font-size:20px}
     </div>
   </main>
 </section>
-
-<audio id="remoteAudio" autoplay playsinline></audio>
-
-<dialog id="callDlg">
-  <div style="text-align: center; padding: 12px;">
-    <h3 id="callTitle">Voice Call</h3>
-    <p id="callSub" style="color:var(--muted); margin: 8px 0 16px;">Connecting...</p>
-    <div class="dlg-actions" style="justify-content: center; gap: 12px;">
-      <button class="btn amber" id="acceptCallBtn" hidden>Accept</button>
-      <button class="btn ghost" id="endCallBtn" style="background: var(--danger); color: white;">End Call</button>
-    </div>
-  </div>
-</dialog>
 
 <dialog id="groupDlg">
   <form method="dialog" id="groupForm">
@@ -217,51 +214,10 @@ dialog h3{margin-bottom:4px;font-size:20px}
   let me = null, ws = null, state = null, online = new Set(), active = null;
   let retryTimer = null, manualClose = false;
 
-  // WebRTC
-  let peerConnection = null;
-  let localStream = null;
-  let currentCallRecipient = null;
-  let pendingOfferSignal = null;
-  let iceCandidatesQueue = [];
-  let ringInterval = null;
-  let audioCtx = null;
-
-  const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
-    ]
-  };
-
-  const callDlg = $('#callDlg');
-
-  function playRingtone() {
-    stopRingtone();
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      ringInterval = setInterval(() => {
-        if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 1.2);
-      }, 2000);
-    } catch(e){}
-  }
-
-  function stopRingtone() {
-    if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
-    if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
-  }
+  // Voice Channel State
+  let activeVoiceRoom = null;
+  let mediaRecorder = null;
+  let micStream = null;
 
   // ---------- storage (safe) ----------
   const store = {
@@ -317,6 +273,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
     manualClose = true;
     clearTimeout(retryTimer);
     if (ws) ws.close();
+    leaveVoiceRoom();
     store.del(SESSION_KEY);
     me = null; state = null; active = null; online = new Set();
     $('#app').hidden = true; $('#app').classList.remove('chat-open');
@@ -349,6 +306,9 @@ dialog h3{margin-bottom:4px;font-size:20px}
       Object.values(state.groups).forEach(g => {
         ws.send(JSON.stringify({type: 'create_group', groupId: g.id, groupName: g.name, members: g.members}));
       });
+      if (activeVoiceRoom) {
+        ws.send(JSON.stringify({type: 'join_voice_room', roomId: activeVoiceRoom}));
+      }
       setStatus(true);
     };
     ws.onmessage = ev => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
@@ -382,10 +342,13 @@ dialog h3{margin-bottom:4px;font-size:20px}
         if (!state.contacts[d.senderId]) state.contacts[d.senderId] = {id: d.senderId, username: d.senderName || d.senderId};
       }
       addMessage(key, {id: d.id, from: d.senderId, name: d.senderName, text: d.text, ts: d.ts});
-    } else if (d.type === 'call_signal') {
-      handleCallSignal(d);
-    } else if (d.type === 'call_status' && d.status === 'ended') {
-      endCall(false);
+    } else if (d.type === 'voice_room_members') {
+      if (d.roomId === activeVoiceRoom) {
+        const names = d.members.map(m => m.username).join(', ');
+        $('#voiceMembers').textContent = `${d.members.length} connected: ${names}`;
+      }
+    } else if (d.type === 'voice_stream') {
+      playAudioChunk(d.audio);
     }
   }
 
@@ -474,7 +437,16 @@ dialog h3{margin-bottom:4px;font-size:20px}
     $('#chAv').className = 'avatar' + (i.group ? ' g' : '');
     $('#chName').textContent = i.name;
     $('#chSub').textContent = i.sub;
-    $('#callBtn').style.display = i.group ? 'none' : 'inline-flex';
+    
+    if (activeVoiceRoom === active) {
+      $('#voiceToggleBtn').textContent = 'Disconnect Voice';
+      $('#voiceToggleBtn').style.background = 'var(--danger)';
+      $('#voiceToggleBtn').style.color = '#fff';
+    } else {
+      $('#voiceToggleBtn').textContent = '🎙️ Join Voice Channel';
+      $('#voiceToggleBtn').style.background = 'var(--amber)';
+      $('#voiceToggleBtn').style.color = 'var(--amber-ink)';
+    }
   }
 
   function renderMessages() {
@@ -552,170 +524,79 @@ dialog h3{margin-bottom:4px;font-size:20px}
     } 
   });
 
-  // ---------- WebRTC Voice Call Logic ----------
-  $('#callBtn').onclick = async () => {
-    if (!active || active.startsWith('g:')) {
-      alert("Voice calls are supported for direct 1-on-1 chats.");
-      return;
-    }
-    const recipientId = active.slice(2);
-    currentCallRecipient = recipientId;
-
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      initPeerConnection(recipientId);
-      
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-
-      ws.send(JSON.stringify({
-        type: 'call_signal',
-        recipientId: recipientId,
-        signal: { type: 'offer', offer: peerConnection.localDescription }
-      }));
-
-      $('#callTitle').textContent = `Calling ${$('#chName').textContent}...`;
-      $('#callSub').textContent = 'Ringing...';
-      $('#acceptCallBtn').hidden = true;
-      playRingtone();
-      callDlg.showModal();
-
-    } catch (err) {
-      alert("Microphone permission denied or no audio input device found.");
+  // ---------- VOICE CHANNEL BROADCAST LOGIC ----------
+  $('#voiceToggleBtn').onclick = () => {
+    if (activeVoiceRoom === active) {
+      leaveVoiceRoom();
+    } else {
+      joinVoiceRoom(active);
     }
   };
 
-  function initPeerConnection(recipientId) {
-    if (peerConnection) peerConnection.close();
+  $('#leaveVoiceBtn').onclick = () => leaveVoiceRoom();
 
-    peerConnection = new RTCPeerConnection(rtcConfig);
-    iceCandidatesQueue = [];
+  async function joinVoiceRoom(roomId) {
+    leaveVoiceRoom();
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      activeVoiceRoom = roomId;
 
-    peerConnection.onicecandidate = event => {
-      if (event.candidate) {
-        ws.send(JSON.stringify({
-          type: 'call_signal',
-          recipientId: recipientId,
-          signal: { type: 'candidate', candidate: event.candidate }
-        }));
-      }
-    };
+      const roomName = $('#chName').textContent;
+      $('#voiceRoomTitle').textContent = `Voice Channel: ${roomName}`;
+      $('#voiceBar').hidden = false;
+      renderHeader();
 
-    peerConnection.ontrack = event => {
-      const audioEl = $('#remoteAudio');
-      if (event.streams && event.streams[0]) {
-        audioEl.srcObject = event.streams[0];
-      } else {
-        const inboundStream = new MediaStream([event.track]);
-        audioEl.srcObject = inboundStream;
-      }
-      audioEl.play().catch(e => console.error("Autoplay prevention error:", e));
-    };
+      ws.send(JSON.stringify({ type: 'join_voice_room', roomId: activeVoiceRoom }));
 
-    peerConnection.oniceconnectionstatechange = () => {
-      if (peerConnection) {
-        if (peerConnection.iceConnectionState === 'connected') {
-          stopRingtone();
-          $('#callSub').textContent = 'Connected';
-        } else if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected') {
-          $('#callSub').textContent = 'Call Connection Failed';
-          setTimeout(() => endCall(false), 2000);
-        }
-      }
-    };
-  }
-
-  async function processIceCandidates() {
-    while (iceCandidatesQueue.length > 0) {
-      const candidate = iceCandidatesQueue.shift();
-      try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {}
-    }
-  }
-
-  async function handleCallSignal(d) {
-    const signal = d.signal;
-    currentCallRecipient = d.senderId;
-
-    if (signal.type === 'offer') {
-      pendingOfferSignal = signal.offer;
-      $('#callTitle').textContent = `Incoming Call from ${d.senderName}`;
-      $('#callSub').textContent = 'Voice Call';
-      $('#acceptCallBtn').hidden = false;
-      playRingtone();
-      callDlg.showModal();
-
-      $('#acceptCallBtn').onclick = async () => {
-        stopRingtone();
-        $('#acceptCallBtn').hidden = true;
-        $('#callSub').textContent = 'Connecting...';
-
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          initPeerConnection(d.senderId);
-          
-          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOfferSignal));
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
-
-          ws.send(JSON.stringify({
-            type: 'call_signal',
-            recipientId: d.senderId,
-            signal: { type: 'answer', answer: peerConnection.localDescription }
-          }));
-
-          await processIceCandidates();
-        } catch (err) {
-          console.error("Accept Call Error:", err);
-          endCall(true);
+      mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm' });
+      mediaRecorder.ondataavailable = async (e) => {
+        if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64Audio = reader.result.split(',')[1];
+            ws.send(JSON.stringify({
+              type: 'voice_chunk',
+              audio: base64Audio
+            }));
+          };
+          reader.readAsDataURL(e.data);
         }
       };
-    } else if (signal.type === 'answer') {
-      stopRingtone();
-      if (peerConnection) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
-        await processIceCandidates();
-      }
-    } else if (signal.type === 'candidate') {
-      if (peerConnection && peerConnection.remoteDescription) {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
-      } else {
-        iceCandidatesQueue.push(signal.candidate);
-      }
+      mediaRecorder.start(250); // Send audio chunks every 250ms
+
+    } catch (err) {
+      alert("Microphone permission required to join voice channel.");
     }
   }
 
-  function endCall(notifyPeer = true) {
-    stopRingtone();
-    if (notifyPeer && currentCallRecipient && ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'call_status',
-        recipientId: currentCallRecipient,
-        status: 'ended'
-      }));
+  function leaveVoiceRoom() {
+    if (activeVoiceRoom) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'leave_voice_room' }));
+      }
+      activeVoiceRoom = null;
     }
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-    }
-    if (peerConnection) {
-      peerConnection.close();
-      peerConnection = null;
+    if (mediaRecorder) {
+      try { mediaRecorder.stop(); } catch(e){}
+      mediaRecorder = null;
     }
 
-    currentCallRecipient = null;
-    pendingOfferSignal = null;
-    iceCandidatesQueue = [];
-    if (callDlg.open) callDlg.close();
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      micStream = null;
+    }
+
+    $('#voiceBar').hidden = true;
+    renderHeader();
   }
 
-  $('#endCallBtn').onclick = () => endCall(true);
+  function playAudioChunk(base64Audio) {
+    try {
+      const audio = new Audio("data:audio/webm;base64," + base64Audio);
+      audio.play().catch(e => {});
+    } catch(e){}
+  }
 
   // ---------- groups ----------
   const dlg = $('#groupDlg');
