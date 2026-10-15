@@ -24,7 +24,6 @@ if (fs.existsSync(USERS_FILE)) {
     }
 }
 
-// Helper: Save users object back to users.json asynchronously
 function saveUsersToFile() {
     fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8', (err) => {
         if (err) {
