@@ -33,6 +33,9 @@ const otps = {};
 const clients = new Map();
 const groups = {};
 
+// Active Voice Channels Map: roomName -> Set of { userId, socket }
+const voiceChannels = new Map();
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -77,53 +80,12 @@ app.post('/api/auth-password', (req, res) => {
     }
 });
 
-// OTP Request Route
-app.post('/api/request-otp', async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email required" });
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    otps[email] = code;
-
-    try {
-        await transporter.sendMail({
-            from: '"Hispace Workspace" <mathewmartin088@gmail.com>',
-            to: email,
-            subject: 'Your Hispace Login Passcode',
-            html: `<h3>Welcome to Hispace</h3><p>Your verification code is: <strong>${code}</strong></p>`
-        });
-        res.json({ success: true, message: "Passcode sent!" });
-    } catch (err) {
-        console.error("Email send error:", err.message);
-        res.json({ success: true, message: "Code generated." });
-    }
-});
-
-// Verify OTP Route
-app.post('/api/verify-otp', (req, res) => {
-    const { email, code, username } = req.body;
-    if (otps[email] && otps[email] === code) {
-        delete otps[email];
-        const userId = (username || email.split('@')[0]).toLowerCase().replace(/[^a-z0-9]/g, '_');
-        
-        if (!users[userId]) {
-            users[userId] = { id: userId, username: username || email.split('@')[0], passwordHash: null, email };
-        } else {
-            users[userId].email = email;
-        }
-
-        saveUsersToFile();
-        res.json({ success: true, user: users[userId] });
-    } else {
-        res.status(400).json({ error: "Invalid verification code" });
-    }
-});
-
 // WebSocket Server
 const wss = new WebSocket.Server({ server: http });
 
 wss.on('connection', (ws) => {
     let currentUserId = null;
+    let currentVoiceRoom = null;
 
     ws.on('message', (message) => {
         try {
@@ -147,29 +109,39 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // WebRTC Voice Call Signaling
-            if (data.type === 'call_signal') {
-                const targetSocket = clients.get(data.recipientId);
-                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                    targetSocket.send(JSON.stringify({
-                        type: 'call_signal',
-                        senderId: currentUserId,
-                        senderName: users[currentUserId]?.username || currentUserId,
-                        signal: data.signal
-                    }));
+            // VOICE ROOM CHANNEL MANAGEMENT
+            if (data.type === 'join_voice_room') {
+                currentVoiceRoom = data.roomId;
+                if (!voiceChannels.has(currentVoiceRoom)) {
+                    voiceChannels.set(currentVoiceRoom, new Map());
                 }
+                voiceChannels.get(currentVoiceRoom).set(currentUserId, ws);
+                broadcastVoiceRoomState(currentVoiceRoom);
                 return;
             }
 
-            // WebRTC Call Status Signals
-            if (data.type === 'call_status') {
-                const targetSocket = clients.get(data.recipientId);
-                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                    targetSocket.send(JSON.stringify({
-                        type: 'call_status',
+            if (data.type === 'leave_voice_room') {
+                leaveVoiceRoom(currentUserId, currentVoiceRoom);
+                currentVoiceRoom = null;
+                return;
+            }
+
+            // BROADCAST AUDIO CHUNKS TO VOICE CHANNEL MEMBERS
+            if (data.type === 'voice_chunk') {
+                if (currentVoiceRoom && voiceChannels.has(currentVoiceRoom)) {
+                    const roomMembers = voiceChannels.get(currentVoiceRoom);
+                    const audioPayload = JSON.stringify({
+                        type: 'voice_stream',
                         senderId: currentUserId,
-                        status: data.status
-                    }));
+                        senderName: users[currentUserId]?.username || currentUserId,
+                        audio: data.audio
+                    });
+
+                    roomMembers.forEach((memberWs, memberId) => {
+                        if (memberId !== currentUserId && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(audioPayload);
+                        }
+                    });
                 }
                 return;
             }
@@ -198,10 +170,46 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         if (currentUserId) {
             clients.delete(currentUserId);
+            if (currentVoiceRoom) {
+                leaveVoiceRoom(currentUserId, currentVoiceRoom);
+            }
             broadcastPresence();
         }
     });
 });
+
+function leaveVoiceRoom(userId, roomId) {
+    if (roomId && voiceChannels.has(roomId)) {
+        const room = voiceChannels.get(roomId);
+        room.delete(userId);
+        if (room.size === 0) {
+            voiceChannels.delete(roomId);
+        } else {
+            broadcastVoiceRoomState(roomId);
+        }
+    }
+}
+
+function broadcastVoiceRoomState(roomId) {
+    if (!voiceChannels.has(roomId)) return;
+    const roomMembers = voiceChannels.get(roomId);
+    const memberList = Array.from(roomMembers.keys()).map(id => ({
+        id,
+        username: users[id]?.username || id
+    }));
+
+    const payload = JSON.stringify({
+        type: 'voice_room_members',
+        roomId: roomId,
+        members: memberList
+    });
+
+    roomMembers.forEach((socket) => {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(payload);
+        }
+    });
+}
 
 function broadcastPresence() {
     const activeUsers = Array.from(clients.keys()).map(id => users[id] || { id, username: id });
