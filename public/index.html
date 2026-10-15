@@ -94,7 +94,6 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(
 .composer .btn{border-radius:99px;padding:12px 22px}
 .offline-banner{background:#fbe9c9;color:#5d3d07;padding:6px 18px;font-size:13.5px;text-align:center}
 
-/* Voice Bar Banner */
 .voice-bar{background:var(--deep-3);color:#fff;padding:8px 18px;display:flex;align-items:center;justify-content:space-between;font-size:13.5px}
 
 dialog{border:0;border-radius:16px;padding:24px;width:min(400px,92vw);margin:auto;box-shadow:0 20px 60px #0006}
@@ -214,10 +213,12 @@ dialog h3{margin-bottom:4px;font-size:20px}
   let me = null, ws = null, state = null, online = new Set(), active = null;
   let retryTimer = null, manualClose = false;
 
-  // Voice Channel State
+  // Voice Channel & Audio Context State
   let activeVoiceRoom = null;
-  let mediaRecorder = null;
   let micStream = null;
+  let audioProcNode = null;
+  let rxAudioCtx = null;
+  let nextPlayTime = 0;
 
   // ---------- storage (safe) ----------
   const store = {
@@ -348,7 +349,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
         $('#voiceMembers').textContent = `${d.members.length} connected: ${names}`;
       }
     } else if (d.type === 'voice_stream') {
-      playAudioChunk(d.audio);
+      playPCMChunk(d.audio);
     }
   }
 
@@ -524,7 +525,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
     } 
   });
 
-  // ---------- VOICE CHANNEL BROADCAST LOGIC ----------
+  // ---------- VOICE CHANNEL STREAMING (PCM WEB AUDIO) ----------
   $('#voiceToggleBtn').onclick = () => {
     if (activeVoiceRoom === active) {
       leaveVoiceRoom();
@@ -548,21 +549,37 @@ dialog h3{margin-bottom:4px;font-size:20px}
 
       ws.send(JSON.stringify({ type: 'join_voice_room', roomId: activeVoiceRoom }));
 
-      mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm' });
-      mediaRecorder.ondataavailable = async (e) => {
-        if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64Audio = reader.result.split(',')[1];
-            ws.send(JSON.stringify({
-              type: 'voice_chunk',
-              audio: base64Audio
-            }));
-          };
-          reader.readAsDataURL(e.data);
+      // Setup Web Audio API Audio Processing
+      const txAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const source = txAudioCtx.createMediaStreamSource(micStream);
+      audioProcNode = txAudioCtx.createScriptProcessor(2048, 1, 1);
+
+      audioProcNode.onaudioprocess = (e) => {
+        if (!activeVoiceRoom || !ws || ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Convert Float32 PCM to Int16 PCM
+        const pcm16 = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
         }
+
+        // Send binary PCM over base64 string
+        let binary = '';
+        const bytes = new Uint8Array(pcm16.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Audio = btoa(binary);
+
+        ws.send(JSON.stringify({
+          type: 'voice_chunk',
+          audio: base64Audio
+        }));
       };
-      mediaRecorder.start(250); // Send audio chunks every 250ms
+
+      source.connect(audioProcNode);
+      audioProcNode.connect(txAudioCtx.destination);
 
     } catch (err) {
       alert("Microphone permission required to join voice channel.");
@@ -577,9 +594,9 @@ dialog h3{margin-bottom:4px;font-size:20px}
       activeVoiceRoom = null;
     }
 
-    if (mediaRecorder) {
-      try { mediaRecorder.stop(); } catch(e){}
-      mediaRecorder = null;
+    if (audioProcNode) {
+      try { audioProcNode.disconnect(); } catch(e){}
+      audioProcNode = null;
     }
 
     if (micStream) {
@@ -591,11 +608,47 @@ dialog h3{margin-bottom:4px;font-size:20px}
     renderHeader();
   }
 
-  function playAudioChunk(base64Audio) {
+  function playPCMChunk(base64Audio) {
     try {
-      const audio = new Audio("data:audio/webm;base64," + base64Audio);
-      audio.play().catch(e => {});
-    } catch(e){}
+      if (!rxAudioCtx) {
+        rxAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        nextPlayTime = rxAudioCtx.currentTime;
+      }
+
+      if (rxAudioCtx.state === 'suspended') {
+        rxAudioCtx.resume();
+      }
+
+      const binary = atob(base64Audio);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / 32768.0;
+      }
+
+      const buffer = rxAudioCtx.createBuffer(1, float32.length, 16000);
+      buffer.getChannelData(0).set(float32);
+
+      const source = rxAudioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(rxAudioCtx.destination);
+
+      const now = rxAudioCtx.currentTime;
+      if (nextPlayTime < now) {
+        nextPlayTime = now;
+      }
+
+      source.start(nextPlayTime);
+      nextPlayTime += buffer.duration;
+
+    } catch(e){
+      console.error("PCM Audio playback error:", e);
+    }
   }
 
   // ---------- groups ----------
