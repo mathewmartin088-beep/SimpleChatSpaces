@@ -33,7 +33,7 @@ const otps = {};
 const clients = new Map();
 const groups = {};
 
-// Active Voice Channels Map: roomName -> Set of { userId, socket }
+// Active Voice Channels Map: roomId -> Map(userId -> socket)
 const voiceChannels = new Map();
 
 const transporter = nodemailer.createTransport({
@@ -109,7 +109,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // VOICE ROOM CHANNEL MANAGEMENT
+            // JOIN VOICE ROOM
             if (data.type === 'join_voice_room') {
                 currentVoiceRoom = data.roomId;
                 if (!voiceChannels.has(currentVoiceRoom)) {
@@ -120,13 +120,14 @@ wss.on('connection', (ws) => {
                 return;
             }
 
+            // LEAVE VOICE ROOM
             if (data.type === 'leave_voice_room') {
                 leaveVoiceRoom(currentUserId, currentVoiceRoom);
                 currentVoiceRoom = null;
                 return;
             }
 
-            // BROADCAST AUDIO CHUNKS TO VOICE CHANNEL MEMBERS
+            // BROADCAST VOICE AUDIO CHUNK
             if (data.type === 'voice_chunk') {
                 if (currentVoiceRoom && voiceChannels.has(currentVoiceRoom)) {
                     const roomMembers = voiceChannels.get(currentVoiceRoom);
@@ -146,6 +147,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
+            // DIRECT OR GROUP TEXT MESSAGES
             if (data.recipientId) {
                 const targetSocket = clients.get(data.recipientId);
                 if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
