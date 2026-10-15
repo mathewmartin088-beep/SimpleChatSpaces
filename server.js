@@ -17,7 +17,7 @@ const db = new sqlite3.Database('./hispace.db', (err) => {
   else console.log('Connected to SQLite persistent database.');
 });
 
-// Initialize Tables
+// Initialize Database Tables
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,10 +52,9 @@ db.serialize(() => {
   });
 });
 
-// 1. JSON Middleware MUST come first
 app.use(express.json());
 
-// 2. All API Routes declared BEFORE static file serving
+// API Routes
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -69,7 +68,7 @@ app.post('/api/register', async (req, res) => {
         if (err.message.includes('UNIQUE')) {
           return res.status(400).json({ error: 'Username already taken.' });
         }
-        return res.status(500).json({ error: 'Database error.' });
+        return res.status(500).json({ error: 'Database error: ' + err.message });
       }
       return res.json({ success: true, username });
     });
@@ -85,10 +84,11 @@ app.post('/api/login', (req, res) => {
   }
 
   db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-    if (err || !user) return res.status(400).json({ error: 'Invalid credentials.' });
+    if (err) return res.status(500).json({ error: 'Database query error.' });
+    if (!user) return res.status(400).json({ error: 'User does not exist.' });
 
     const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(400).json({ error: 'Invalid credentials.' });
+    if (!match) return res.status(400).json({ error: 'Incorrect password.' });
 
     return res.json({ success: true, username: user.username });
   });
@@ -104,14 +104,14 @@ app.get('/api/channels', (req, res) => {
 app.get('/api/messages/:channelId', (req, res) => {
   const channelId = req.params.channelId;
   if (!channelId || channelId === 'undefined' || channelId === 'null') {
-    return res.status(400).json({ error: 'Invalid channel ID' });
+    return res.status(400).json({ error: 'Invalid channel ID specified.' });
   }
 
   db.all(
     'SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at ASC',
     [channelId],
     (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch messages' });
+      if (err) return res.status(500).json({ error: 'Failed to fetch messages.' });
       const formatted = (rows || []).map(r => ({
         ...r,
         reactions: JSON.parse(r.reactions || '{}')
@@ -121,20 +121,20 @@ app.get('/api/messages/:channelId', (req, res) => {
   );
 });
 
-// Explicit 404 for unmatched API requests so they return JSON, NOT HTML
+// Any bad API endpoint returns JSON with an explicit message
 app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: 'API route not found' });
+  res.status(404).json({ error: `API route '${req.originalUrl}' not found.` });
 });
 
-// 3. Static frontend files served AFTER API routes
+// Static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 4. Fallback for SPA navigation
+// Catch-All SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// WebSocket Real-time Engine
+// WebSocket Real-time Messaging
 const clients = new Set();
 
 wss.on('connection', (ws) => {
@@ -186,5 +186,5 @@ function broadcast(data) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
