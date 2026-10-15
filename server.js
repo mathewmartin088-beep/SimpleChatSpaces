@@ -11,7 +11,7 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3100;
 
-// Connect to SQLite Database file (creates hispace.db locally if it doesn't exist)
+// Connect to SQLite Database
 const db = new sqlite3.Database('./hispace.db', (err) => {
   if (err) console.error('Database connection error:', err.message);
   else console.log('Connected to SQLite persistent database.');
@@ -52,61 +52,89 @@ db.serialize(() => {
   });
 });
 
+// 1. JSON Middleware MUST come first
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Authentication Routes
+// 2. All API Routes declared BEFORE static file serving
 app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
 
-  const hash = await bcrypt.hash(password, 10);
-  db.run('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash], function(err) {
-    if (err) {
-      if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Username already taken.' });
-      return res.status(500).json({ error: 'Database error.' });
-    }
-    res.json({ success: true, username });
-  });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    db.run('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash], function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE')) {
+          return res.status(400).json({ error: 'Username already taken.' });
+        }
+        return res.status(500).json({ error: 'Database error.' });
+      }
+      return res.json({ success: true, username });
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error during registration.' });
+  }
 });
 
 app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
+
   db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
     if (err || !user) return res.status(400).json({ error: 'Invalid credentials.' });
-    
+
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(400).json({ error: 'Invalid credentials.' });
 
-    res.json({ success: true, username: user.username });
+    return res.json({ success: true, username: user.username });
   });
 });
 
-// REST API Endpoints for Channels & Global Chat History
 app.get('/api/channels', (req, res) => {
   db.all('SELECT * FROM channels', [], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Failed to fetch channels' });
-    res.json(rows);
+    return res.json(rows || []);
   });
 });
 
-// Returns full history for any device joining a channel
 app.get('/api/messages/:channelId', (req, res) => {
+  const channelId = req.params.channelId;
+  if (!channelId || channelId === 'undefined' || channelId === 'null') {
+    return res.status(400).json({ error: 'Invalid channel ID' });
+  }
+
   db.all(
     'SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at ASC',
-    [req.params.channelId],
+    [channelId],
     (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch history' });
-      const formatted = rows.map(r => ({
+      if (err) return res.status(500).json({ error: 'Failed to fetch messages' });
+      const formatted = (rows || []).map(r => ({
         ...r,
         reactions: JSON.parse(r.reactions || '{}')
       }));
-      res.json(formatted);
+      return res.json(formatted);
     }
   );
 });
 
-// WebSocket Real-time Messaging
+// Explicit 404 for unmatched API requests so they return JSON, NOT HTML
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
+});
+
+// 3. Static frontend files served AFTER API routes
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 4. Fallback for SPA navigation
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// WebSocket Real-time Engine
 const clients = new Set();
 
 wss.on('connection', (ws) => {
@@ -116,17 +144,15 @@ wss.on('connection', (ws) => {
     try {
       const data = JSON.parse(messageRaw);
 
-      if (data.type === 'chat_message') {
+      if (data.type === 'chat_message' && data.channelId && data.username && data.content) {
         const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
         const timestamp = new Date().toISOString();
 
-        // 1. Save directly to DB first
         db.run(
           'INSERT INTO messages (id, channel_id, username, content, created_at, reactions) VALUES (?, ?, ?, ?, ?, ?)',
           [msgId, data.channelId, data.username, data.content, timestamp, '{}'],
           (err) => {
             if (!err) {
-              // 2. Broadcast to all connected clients across devices
               broadcast({
                 type: 'new_message',
                 message: {
@@ -160,5 +186,5 @@ function broadcast(data) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Server active on port ${PORT}. History synced across devices.`);
+  console.log(`Server listening on port ${PORT}`);
 });
