@@ -1,0 +1,4 @@
+{
+  "main": "server.js",
+  "output": "prep.blob"
+}
