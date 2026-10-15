@@ -219,12 +219,43 @@ dialog h3{margin-bottom:4px;font-size:20px}
   let me = null, ws = null, state = null, online = new Set(), active = null;
   let retryTimer = null, manualClose = false;
 
-  // WebRTC Variables
+  // WebRTC & Audio State
   let peerConnection = null;
   let localStream = null;
   let currentCallRecipient = null;
+  let pendingOfferSignal = null;
+  let iceCandidatesQueue = [];
+  let ringInterval = null;
+  let audioCtx = null;
+
   const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const callDlg = $('#callDlg');
+
+  // Synthesize soft call ringtone with Web Audio API
+  function playRingtone() {
+    stopRingtone();
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      ringInterval = setInterval(() => {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.2);
+      }, 2000);
+    } catch(e){}
+  }
+
+  function stopRingtone() {
+    if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  }
 
   // ---------- storage (safe) ----------
   const store = {
@@ -542,6 +573,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
       $('#callTitle').textContent = `Calling ${$('#chName').textContent}...`;
       $('#callSub').textContent = 'Ringing...';
       $('#acceptCallBtn').hidden = true;
+      playRingtone();
       callDlg.showModal();
 
     } catch (err) {
@@ -551,6 +583,7 @@ dialog h3{margin-bottom:4px;font-size:20px}
 
   function initPeerConnection(recipientId) {
     peerConnection = new RTCPeerConnection(rtcConfig);
+    iceCandidatesQueue = [];
 
     peerConnection.onicecandidate = event => {
       if (event.candidate) {
@@ -563,8 +596,19 @@ dialog h3{margin-bottom:4px;font-size:20px}
     };
 
     peerConnection.ontrack = event => {
-      $('#remoteAudio').srcObject = event.streams[0];
+      const audioEl = $('#remoteAudio');
+      audioEl.srcObject = event.streams[0];
+      audioEl.play().catch(e => console.log(e));
     };
+  }
+
+  async function processIceCandidates() {
+    while (iceCandidatesQueue.length > 0) {
+      const candidate = iceCandidatesQueue.shift();
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {}
+    }
   }
 
   async function handleCallSignal(d) {
@@ -572,21 +616,24 @@ dialog h3{margin-bottom:4px;font-size:20px}
     currentCallRecipient = d.senderId;
 
     if (signal.type === 'offer') {
+      pendingOfferSignal = signal.offer;
       $('#callTitle').textContent = `Incoming Call from ${d.senderName}`;
       $('#callSub').textContent = 'Voice Call';
       $('#acceptCallBtn').hidden = false;
+      playRingtone();
       callDlg.showModal();
 
       $('#acceptCallBtn').onclick = async () => {
+        stopRingtone();
         $('#acceptCallBtn').hidden = true;
-        $('#callSub').textContent = 'Connected';
+        $('#callSub').textContent = 'Connecting...';
 
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           initPeerConnection(d.senderId);
           localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOfferSignal));
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
 
@@ -595,21 +642,31 @@ dialog h3{margin-bottom:4px;font-size:20px}
             recipientId: d.senderId,
             signal: { type: 'answer', answer: peerConnection.localDescription }
           }));
+
+          await processIceCandidates();
+          $('#callSub').textContent = 'Connected';
         } catch (err) {
           endCall(true);
         }
       };
     } else if (signal.type === 'answer') {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
-      $('#callSub').textContent = 'Connected';
-    } else if (signal.type === 'candidate') {
+      stopRingtone();
       if (peerConnection) {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
+        await processIceCandidates();
+        $('#callSub').textContent = 'Connected';
+      }
+    } else if (signal.type === 'candidate') {
+      if (peerConnection && peerConnection.remoteDescription) {
         await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      } else {
+        iceCandidatesQueue.push(signal.candidate);
       }
     }
   }
 
   function endCall(notifyPeer = true) {
+    stopRingtone();
     if (notifyPeer && currentCallRecipient && ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: 'call_status',
@@ -628,6 +685,8 @@ dialog h3{margin-bottom:4px;font-size:20px}
     }
 
     currentCallRecipient = null;
+    pendingOfferSignal = null;
+    iceCandidatesQueue = [];
     if (callDlg.open) callDlg.close();
   }
 
