@@ -1,728 +1,261 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Hispace</title>
-<style>
-:root{
-  --deep:#10303a; --deep-2:#183f4b; --deep-3:#21505e;
-  --fog:#e8edf0; --paper:#ffffff; --ink:#18262c; --muted:#6a7b83;
-  --amber:#f0a73a; --amber-ink:#3b2503; --mine:#d6ecea; --line:#d5dde1;
-  --danger:#b4361f; --online:#3fb27f;
-  font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:var(--fog);color:var(--ink);font-size:15px;line-height:1.4}
-button,input{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none}
-:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-[hidden]{display:none!important}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hispace</title>
+  <style>
+    :root {
+      --bg-dark: #120e24;
+      --bg-sidebar: #17132e;
+      --bg-chat: #1f1a3a;
+      --bg-hover: #29244a;
+      --accent-gold: #f5ba42;
+      --text-main: #e2e1e8;
+      --text-muted: #8e8a9f;
+      --error-red: #ff5555;
+    }
 
-/* ---------- Login ---------- */
-#login{min-height:100%;display:grid;grid-template-columns:1fr 1fr}
-.brand{background:var(--deep);color:#e9f3f4;padding:56px;display:flex;flex-direction:column;justify-content:space-between}
-.brand h1{font-size:clamp(44px,6vw,76px);font-weight:700;letter-spacing:-2px;line-height:1}
-.brand p{max-width:30ch;color:#a9c4c9;font-size:18px;margin-top:16px}
-.brand small{color:#7ea1a8}
-.brand .mark{width:54px;height:54px;border-radius:16px 16px 16px 4px;background:var(--amber);display:grid;place-items:center;color:var(--amber-ink);font-weight:800;font-size:26px}
-.formside{display:grid;place-items:center;padding:32px}
-.card{width:min(380px,100%)}
-.card h2{font-size:26px;margin-bottom:6px}
-.card .sub{color:var(--muted);margin-bottom:24px}
-label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
-.field{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--paper)}
-.field:focus{border-color:var(--deep-3);outline:none;box-shadow:0 0 0 3px #21505e26}
-.pw{position:relative}
-.pw button{position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:6px 8px;color:var(--muted);font-size:13px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border-radius:10px;font-weight:600}
-.btn.primary{background:var(--deep);color:#fff;width:100%;margin-top:22px}
-.btn.primary:hover{background:var(--deep-2)}
-.btn.primary:disabled{opacity:.6;cursor:wait}
-.btn.amber{background:var(--amber);color:var(--amber-ink)}
-.btn.ghost{background:var(--fog)}
-.err{color:var(--danger);font-size:14px;min-height:20px;margin-top:12px}
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; }
 
-/* ---------- App ---------- */
-#app{height:100dvh;display:grid;grid-template-columns:340px 1fr}
-aside{background:var(--deep);color:#dbe9eb;display:flex;flex-direction:column;min-height:0}
-.me{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid #ffffff14}
-.me .who{flex:1;min-width:0}
-.me .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.me .who span{font-size:13px;color:#8fb0b6;display:flex;align-items:center;gap:6px}
-.dot{width:9px;height:9px;border-radius:50%;background:#7a8f94;display:inline-block;flex:none}
-.dot.on{background:var(--online)}
-.icon-btn{padding:8px 10px;border-radius:8px;color:#b9d1d5;font-size:13px}
-.icon-btn:hover{background:var(--deep-2);color:#fff}
-.avatar{width:42px;height:42px;border-radius:14px 14px 14px 4px;display:grid;place-items:center;font-weight:700;flex:none;color:var(--deep);background:var(--amber)}
-.avatar.g{border-radius:14px;background:#9fd0cb}
-.tools{padding:12px 16px;display:flex;gap:8px}
-.tools .field{background:var(--deep-2);border-color:transparent;color:#fff;padding:10px 12px}
-.tools .field::placeholder{color:#86a6ac}
-.tools .field:focus{border-color:var(--amber);box-shadow:none}
-.tools .btn{padding:10px 12px;font-size:14px;white-space:nowrap}
-#list{flex:1;overflow-y:auto;padding:4px 8px 16px}
-.sec{padding:14px 10px 6px;font-size:13px;color:#7ea1a8;font-weight:600}
-.row{width:100%;display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;text-align:left}
-.row:hover{background:var(--deep-2)}
-.row.active{background:var(--deep-3)}
-.row .meta{flex:1;min-width:0}
-.row .top{display:flex;justify-content:space-between;gap:8px}
-.row .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f1f8f9;display:flex;align-items:center;gap:7px}
-.row .time{font-size:12px;color:#7ea1a8;flex:none}
-.row .last{font-size:13.5px;color:#9dbbc0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.badge{background:var(--amber);color:var(--amber-ink);border-radius:99px;font-size:12px;font-weight:700;padding:1px 7px;flex:none}
-.empty-list{padding:20px 12px;color:#8fb0b6;font-size:14px}
+    #auth-screen {
+      position: fixed; inset: 0; background: var(--bg-dark); display: flex;
+      align-items: center; justify-content: center; z-index: 100;
+    }
+    .auth-box {
+      background: var(--bg-sidebar); border: 1px solid #2a244d; border-radius: 12px;
+      padding: 32px; width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .auth-title { font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; }
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .input-group input {
+      width: 100%; padding: 10px 12px; background: #0f0c1d; border: 1px solid #332d56;
+      border-radius: 6px; color: #fff; outline: none;
+    }
+    .input-group input:focus { border-color: var(--accent-gold); }
+    .btn {
+      width: 100%; padding: 12px; background: var(--accent-gold); color: #000;
+      border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px;
+    }
+    .toggle-auth { text-align: center; margin-top: 12px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+    #auth-error { color: var(--error-red); font-size: 12px; margin-top: 10px; text-align: center; display: none; }
 
-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--fog)}
-.chat-head{display:flex;align-items:center;gap:12px;padding:12px 18px;background:var(--paper);border-bottom:1px solid var(--line)}
-.chat-head .back{display:none;padding:8px;font-size:20px}
-.chat-head h3{font-size:17px;line-height:1.2}
-.chat-head small{color:var(--muted)}
-#msgs{flex:1;overflow-y:auto;padding:20px 18px;display:flex;flex-direction:column;gap:6px}
-.msg{max-width:min(560px,78%);padding:9px 13px 7px;border-radius:14px;background:var(--paper);align-self:flex-start;border-bottom-left-radius:4px;box-shadow:0 1px 0 #0000000d;word-wrap:break-word;overflow-wrap:anywhere}
-.msg.mine{align-self:flex-end;background:var(--mine);border-radius:14px;border-bottom-right-radius:4px}
-.msg .from{font-size:12.5px;font-weight:700;color:var(--deep-3);margin-bottom:2px}
-.msg .txt{white-space:pre-wrap}
-.msg .ts{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
-.day{align-self:center;font-size:12px;color:var(--muted);background:#d5dde1;border-radius:99px;padding:2px 12px;margin:10px 0 4px}
-.placeholder{flex:1;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
-.placeholder b{display:block;color:var(--ink);font-size:20px;margin-bottom:6px}
-.composer{display:flex;gap:10px;padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));background:var(--paper);border-top:1px solid var(--line)}
-.composer .field{flex:1;border-radius:99px;padding:12px 18px}
-.composer .btn{border-radius:99px;padding:12px 22px}
-.offline-banner{background:#fbe9c9;color:#5d3d07;padding:6px 18px;font-size:13.5px;text-align:center}
+    #app-screen { display: flex; width: 100vw; height: 100vh; }
+    
+    .server-bar { width: 72px; background: #0c0a18; display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 12px; }
+    .server-icon { width: 48px; height: 48px; border-radius: 16px; background: var(--accent-gold); color: #000; font-weight: bold; display: flex; align-items: center; justify-content: center; }
 
-.voice-bar{background:var(--deep-3);color:#fff;padding:8px 18px;display:flex;align-items:center;justify-content:space-between;font-size:13.5px}
+    .sidebar { width: 240px; background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid #252042; }
+    .server-header { padding: 16px; font-weight: bold; border-bottom: 1px solid #252042; }
+    .channels-list { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .channel-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
+    .channel-item.active, .channel-item:hover { background: var(--bg-hover); color: #fff; }
 
-dialog{border:0;border-radius:16px;padding:24px;width:min(400px,92vw);margin:auto;box-shadow:0 20px 60px #0006}
-dialog::backdrop{background:#10303a99}
-dialog h3{margin-bottom:4px;font-size:20px}
-.pick{max-height:220px;overflow-y:auto;margin-top:10px;border:1.5px solid var(--line);border-radius:10px}
-.pick label{display:flex;align-items:center;gap:10px;margin:0;padding:10px 12px;font-weight:500;cursor:pointer;border-bottom:1px solid var(--line)}
-.pick label:last-child{border-bottom:0}
-.dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-
-@media (max-width:760px){
-  #login{grid-template-columns:1fr}
-  .brand{padding:28px;gap:40px}
-  #app{grid-template-columns:1fr}
-  main{display:none}
-  #app.chat-open aside{display:none}
-  #app.chat-open main{display:flex}
-  .chat-head .back{display:block}
-  .msg{max-width:88%}
-}
-@media (prefers-reduced-motion:no-preference){
-  .msg{animation:pop .15s ease-out}
-  @keyframes pop{from{transform:translateY(4px);opacity:0}to{transform:none;opacity:1}}
-}
-</style>
+    .chat-area { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
+    .chat-header { height: 56px; border-bottom: 1px solid #252042; display: flex; align-items: center; padding: 0 20px; font-weight: bold; }
+    .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+    
+    .msg { display: flex; gap: 12px; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; background: #4a3e7d; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+    .msg-content { flex: 1; }
+    .msg-header { display: flex; gap: 8px; font-size: 12px; margin-bottom: 4px; }
+    .msg-author { font-weight: bold; color: #fff; }
+    .msg-time { color: var(--text-muted); }
+    .msg-text { line-height: 1.4; color: var(--text-main); }
+    
+    .chat-input-area { padding: 16px; background: var(--bg-sidebar); }
+    .chat-input { width: 100%; padding: 12px 16px; background: #0f0c1d; border: 1px solid #332d56; border-radius: 8px; color: #fff; outline: none; }
+  </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<section id="login">
-  <div class="brand">
-    <div class="mark">H</div>
-    <div>
-      <h1>Hispace</h1>
-      <p>A shared workspace for talking with the people on your network.</p>
-    </div>
-    <small>Portable workspace</small>
-  </div>
-  <div class="formside">
-    <form class="card" id="loginForm" autocomplete="on">
-      <h2>Sign in</h2>
-      <p class="sub">New here? Pick a username and password and your account is created the first time you sign in.</p>
-      <label for="u">Username</label>
-      <input class="field" id="u" name="username" autocomplete="username" required autofocus>
-      <label for="p">Password</label>
-      <div class="pw">
-        <input class="field" id="p" name="password" type="password" autocomplete="current-password" required>
-        <button type="button" id="showpw">Show</button>
+  <div id="auth-screen">
+    <div class="auth-box">
+      <div class="auth-title" id="auth-title">Welcome Back</div>
+      <div class="input-group">
+        <label>USERNAME</label>
+        <input type="text" id="username-input" placeholder="Enter username">
       </div>
-      <div class="err" id="loginErr" role="alert"></div>
-      <button class="btn primary" id="loginBtn" type="submit">Sign in</button>
-    </form>
-  </div>
-</section>
-
-<!-- APP -->
-<section id="app" hidden>
-  <aside>
-    <div class="me">
-      <div class="avatar" id="meAv"></div>
-      <div class="who"><b id="meName"></b><span><i class="dot" id="meDot"></i><em id="meStatus" style="font-style:normal">Connecting…</em></span></div>
-      <button class="icon-btn" id="logout">Sign out</button>
-    </div>
-    <div class="tools">
-      <input class="field" id="newUser" placeholder="Message a username" aria-label="Username to message">
-      <button class="btn amber" id="startChat">Chat</button>
-      <button class="btn amber" id="newGroup" title="Create a group">Group</button>
-    </div>
-    <div id="list"></div>
-  </aside>
-
-  <main>
-    <div id="banner" class="offline-banner" hidden>Reconnecting to the server…</div>
-    
-    <!-- VOICE CHANNEL ACTIVE BAR -->
-    <div id="voiceBar" class="voice-bar" hidden>
-      <div><strong id="voiceRoomTitle">Voice Channel</strong> — <span id="voiceMembers">1 member connected</span></div>
-      <button class="btn ghost" id="leaveVoiceBtn" style="background:var(--danger);color:#fff;padding:4px 12px;font-size:12px">Leave Voice</button>
-    </div>
-
-    <div class="placeholder" id="none"><div><b>Pick a conversation</b>Choose someone from the list, or type a username to start a new chat.</div></div>
-    <div id="chat" hidden style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="chat-head">
-        <button class="back" id="back" aria-label="Back to conversations">‹</button>
-        <div class="avatar" id="chAv"></div>
-        <div><h3 id="chName"></h3><small id="chSub"></small></div>
-        <button class="btn amber" id="voiceToggleBtn" style="margin-left:auto">🎙️ Join Voice Channel</button>
+      <div class="input-group">
+        <label>PASSWORD</label>
+        <input type="password" id="password-input" placeholder="Enter password">
       </div>
-      <div id="msgs"></div>
-      <form class="composer" id="composer">
-        <input class="field" id="text" placeholder="Write a message" autocomplete="off" aria-label="Message">
-        <button class="btn amber" type="submit">Send</button>
-      </form>
+      <button class="btn" onclick="submitAuth()">Sign In</button>
+      <div id="auth-error"></div>
+      <div class="toggle-auth" onclick="toggleAuthMode()" id="auth-toggle">Need an account? Register</div>
     </div>
-  </main>
-</section>
+  </div>
 
-<dialog id="groupDlg">
-  <form method="dialog" id="groupForm">
-    <h3>New group</h3>
-    <p style="color:var(--muted);font-size:14px">Name the group and choose who to add.</p>
-    <label for="gname">Group name</label>
-    <input class="field" id="gname" maxlength="40" required>
-    <label>Members</label>
-    <div class="pick" id="gpick"></div>
-    <div class="dlg-actions">
-      <button class="btn ghost" type="button" id="gcancel">Cancel</button>
-      <button class="btn amber" type="submit">Create group</button>
+  <div id="app-screen" style="display: none;">
+    <div class="server-bar">
+      <div class="server-icon">NO</div>
     </div>
-  </form>
-</dialog>
 
-<script>
-(() => {
-  const $ = s => document.querySelector(s);
-  const SESSION_KEY = 'hispace:session';
-  let me = null, ws = null, state = null, online = new Set(), active = null;
-  let retryTimer = null, manualClose = false;
+    <div class="sidebar">
+      <div class="server-header">Night Owls</div>
+      <div class="channels-list" id="channels-list"></div>
+    </div>
 
-  // Voice Channel State
-  let activeVoiceRoom = null;
-  let micStream = null;
-  let audioProcNode = null;
-  let rxAudioCtx = null;
-  let nextPlayTime = 0;
+    <div class="chat-area">
+      <div class="chat-header" id="current-channel-name"># general</div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="message-input" placeholder="Message #general" onkeypress="handleKeyPress(event)">
+      </div>
+    </div>
+  </div>
 
-  // ---------- storage (safe) ----------
-  const store = {
-    get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-    set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
-    del(k){ try { localStorage.removeItem(k); } catch {} }
-  };
-  const saveState = () => { if (me && me.id) store.set('hispace:data:' + me.id, state); };
-  const toId = n => n.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  <script>
+    let isRegister = false;
+    let currentUser = null;
+    let activeChannel = 'general';
+    let ws = null;
 
-  // ---------- helpers ----------
-  const initial = n => (n || '?').trim().charAt(0).toUpperCase();
-  const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
-  const fmtDay = t => {
-    const d = new Date(t), today = new Date(), y = new Date(); y.setDate(today.getDate()-1);
-    if (d.toDateString() === today.toDateString()) return 'Today';
-    if (d.toDateString() === y.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString([], {day:'numeric', month:'short', year:'numeric'});
-  };
-  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-
-  // ---------- login ----------
-  $('#showpw').onclick = () => {
-    const p = $('#p'); const show = p.type === 'password';
-    p.type = show ? 'text' : 'password';
-    $('#showpw').textContent = show ? 'Hide' : 'Show';
-  };
-
-  $('#loginForm').addEventListener('submit', async e => {
-    e.preventDefault(); // Stop page refresh
-    const btn = $('#loginBtn'), err = $('#loginErr');
-    err.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
-    try {
-      const res = await fetch('/api/auth-password', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username: $('#u').value.trim(), password: $('#p').value})
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Could not sign in');
-      
-      store.set(SESSION_KEY, {id: data.user.id, username: data.user.username});
-      $('#p').value = '';
-      startApp(data.user);
-    } catch (ex) {
-      err.textContent = ex.message === 'Failed to fetch' ? 'Cannot reach the Hispace server. Make sure it is running.' : ex.message;
-    } finally {
-      btn.disabled = false; btn.textContent = 'Sign in';
-    }
-  });
-
-  $('#logout').onclick = () => {
-    manualClose = true;
-    clearTimeout(retryTimer);
-    if (ws) ws.close();
-    leaveVoiceRoom();
-    store.del(SESSION_KEY);
-    me = null; state = null; active = null; online = new Set();
-    $('#app').hidden = true; $('#app').classList.remove('chat-open');
-    $('#login').hidden = false;
-    $('#u').focus();
-  };
-
-  // ---------- app start ----------
-  function startApp(user) {
-    if (!user || !user.id) return;
-    me = {id: user.id, username: user.username};
-    
-    let loadedState = store.get('hispace:data:' + me.id);
-    if (!loadedState || typeof loadedState !== 'object') {
-      loadedState = {contacts: {}, groups: {}, msgs: {}, unread: {}, last: {}};
-    }
-    
-    state = loadedState;
-    state.contacts = state.contacts || {}; 
-    state.groups = state.groups || {};
-    state.msgs = state.msgs || {}; 
-    state.unread = state.unread || {}; 
-    state.last = state.last || {};
-    
-    $('#login').hidden = true; 
-    $('#app').hidden = false;
-    $('#meAv').textContent = initial(me.username);
-    $('#meName').textContent = me.username;
-    
-    active = null; 
-    showChat();
-    renderList();
-    manualClose = false;
-    connect();
-  }
-
-  // ---------- websocket ----------
-  function connect() {
-    if (!me) return;
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}`);
-    ws.onopen = () => {
-      ws.send(JSON.stringify({type: 'handshake', senderId: me.id}));
-      Object.values(state.groups).forEach(g => {
-        ws.send(JSON.stringify({type: 'create_group', groupId: g.id, groupName: g.name, members: g.members}));
-      });
-      if (activeVoiceRoom) {
-        ws.send(JSON.stringify({type: 'join_voice_room', roomId: activeVoiceRoom}));
-      }
-      setStatus(true);
-    };
-    ws.onmessage = ev => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
-    ws.onclose = () => {
-      setStatus(false);
-      if (!manualClose && me) { clearTimeout(retryTimer); retryTimer = setTimeout(connect, 2000); }
-    };
-    ws.onerror = () => ws.close();
-  }
-
-  function setStatus(up) {
-    $('#meDot').classList.toggle('on', up);
-    $('#meStatus').textContent = up ? 'Online' : 'Offline';
-    $('#banner').hidden = up;
-  }
-
-  function handle(d) {
-    if (d.type === 'presence') {
-      online = new Set(d.users.map(u => u.id));
-      d.users.forEach(u => { if (u.id !== me.id) state.contacts[u.id] = {id: u.id, username: u.username || u.id}; });
-      saveState(); 
-      renderList(); 
-      renderHeader();
-    } else if (d.type === 'group_created') {
-      state.groups[d.group.id] = d.group; 
-      saveState(); 
-      renderList();
-    } else if (d.type === 'message') {
-      let key;
-      if (d.groupId) {
-        if (!state.groups[d.groupId]) return;
-        key = 'g:' + d.groupId;
-      } else {
-        key = 'u:' + d.senderId;
-        if (!state.contacts[d.senderId]) state.contacts[d.senderId] = {id: d.senderId, username: d.senderName || d.senderId};
-      }
-      addMessage(key, {id: d.id, from: d.senderId, name: d.senderName, text: d.text, ts: d.ts});
-    } else if (d.type === 'voice_room_members') {
-      if (d.roomId === activeVoiceRoom) {
-        const names = d.members.map(m => m.username).join(', ');
-        $('#voiceMembers').textContent = `${d.members.length} connected: ${names}`;
-      }
-    } else if (d.type === 'voice_stream') {
-      playPCMChunk(d.audio);
-    }
-  }
-
-  function addMessage(key, m) {
-    (state.msgs[key] = state.msgs[key] || []).push(m);
-    if (state.msgs[key].length > 500) state.msgs[key].shift();
-    state.last[key] = m.ts;
-    if (m.from !== me.id && key !== active) state.unread[key] = (state.unread[key] || 0) + 1;
-    saveState(); 
-    renderList();
-    if (key === active) { renderMessages(); }
-  }
-
-  // ---------- sidebar ----------
-  function convs() {
-    const out = [];
-    Object.values(state.groups).forEach(g => out.push({key: 'g:' + g.id, group: true, id: g.id, name: g.name}));
-    Object.values(state.contacts).forEach(c => out.push({key: 'u:' + c.id, group: false, id: c.id, name: c.username}));
-    return out;
-  }
-  const lastText = key => { const a = state.msgs[key]; if (!a || !a.length) return null; const m = a[a.length-1]; return (m.from === me.id ? 'You: ' : '') + m.text; };
-
-  function renderList() {
-    const list = $('#list'); list.replaceChildren();
-    const all = convs();
-    const withMsgs = all.filter(c => state.last[c.key]).sort((a,b) => state.last[b.key] - state.last[a.key]);
-    const onlineNoMsgs = all.filter(c => !state.last[c.key] && !c.group && online.has(c.id));
-    const rest = all.filter(c => !state.last[c.key] && !(c.group === false && online.has(c.id)));
-
-    const section = (title, items) => {
-      if (!items.length) return;
-      list.append(el('div', 'sec', title));
-      items.forEach(c => list.append(row(c)));
-    };
-    section('Conversations', withMsgs);
-    section('Online now', onlineNoMsgs);
-    section('Other contacts', rest);
-    if (!all.length) list.append(el('div', 'empty-list', 'No one here yet. Type a username above to start a chat, or wait for someone to come online.'));
-  }
-
-  function row(c) {
-    const b = el('button', 'row' + (c.key === active ? ' active' : ''));
-    b.type = 'button';
-    b.append(Object.assign(el('div', 'avatar' + (c.group ? ' g' : ''), initial(c.name))));
-    const meta = el('div', 'meta');
-    const top = el('div', 'top');
-    const name = el('div', 'name');
-    if (!c.group) name.append(el('i', 'dot' + (online.has(c.id) ? ' on' : '')));
-    name.append(document.createTextNode(c.name));
-    top.append(name);
-    if (state.last[c.key]) top.append(el('span', 'time', fmtTime(state.last[c.key])));
-    meta.append(top);
-    const lt = lastText(c.key);
-    const bottom = el('div', 'top');
-    bottom.append(el('div', 'last', lt || (c.group ? 'Group' : (online.has(c.id) ? 'Online' : 'Offline'))));
-    if (state.unread[c.key]) bottom.append(el('span', 'badge', state.unread[c.key]));
-    meta.append(bottom);
-    b.append(meta);
-    b.onclick = () => openConv(c.key);
-    return b;
-  }
-
-  // ---------- chat view ----------
-  function openConv(key) {
-    active = key; state.unread[key] = 0; saveState();
-    showChat(); renderList(); renderHeader(); renderMessages();
-    $('#app').classList.add('chat-open');
-    $('#text').focus();
-  }
-
-  function showChat() {
-    const on = !!active;
-    $('#none').hidden = on;
-    const chat = $('#chat'); chat.hidden = !on; chat.style.display = on ? 'flex' : 'none';
-  }
-
-  function activeInfo() {
-    if (!active) return null;
-    const [t, id] = [active.slice(0,1), active.slice(2)];
-    if (t === 'g') { const g = state.groups[id]; return g && {name: g.name, group: true, sub: g.members.length + ' members'}; }
-    const c = state.contacts[id]; return c && {name: c.username, group: false, sub: online.has(id) ? 'Online' : 'Offline'};
-  }
-
-  function renderHeader() {
-    const i = activeInfo(); if (!i) return;
-    $('#chAv').textContent = initial(i.name);
-    $('#chAv').className = 'avatar' + (i.group ? ' g' : '');
-    $('#chName').textContent = i.name;
-    $('#chSub').textContent = i.sub;
-    
-    const canonicalRoomId = getVoiceRoomId(active);
-    if (activeVoiceRoom === canonicalRoomId) {
-      $('#voiceToggleBtn').textContent = 'Disconnect Voice';
-      $('#voiceToggleBtn').style.background = 'var(--danger)';
-      $('#voiceToggleBtn').style.color = '#fff';
-    } else {
-      $('#voiceToggleBtn').textContent = '🎙️ Join Voice Channel';
-      $('#voiceToggleBtn').style.background = 'var(--amber)';
-      $('#voiceToggleBtn').style.color = 'var(--amber-ink)';
-    }
-  }
-
-  function renderMessages() {
-    const box = $('#msgs'); box.replaceChildren();
-    const arr = state.msgs[active] || [];
-    const isGroup = active.startsWith('g:');
-    let lastDay = '';
-    arr.forEach(m => {
-      const day = fmtDay(m.ts);
-      if (day !== lastDay) { box.append(el('div', 'day', day)); lastDay = day; }
-      const mine = m.from === me.id;
-      const b = el('div', 'msg' + (mine ? ' mine' : ''));
-      if (isGroup && !mine) b.append(el('div', 'from', m.name || m.from));
-      b.append(el('div', 'txt', m.text));
-      b.append(el('div', 'ts', fmtTime(m.ts)));
-      box.append(b);
-    });
-    box.scrollTop = box.scrollHeight;
-  }
-
-  $('#back').onclick = () => { $('#app').classList.remove('chat-open'); active = null; showChat(); renderList(); };
-
-  $('#composer').addEventListener('submit', e => {
-    e.preventDefault();
-    const input = $('#text'); const text = input.value.trim();
-    if (!text || !active) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) { $('#banner').hidden = false; return; }
-    
-    const base = {type: 'message', id: uid(), senderId: me.id, senderName: me.username, text, ts: Date.now()};
-    const id = active.slice(2);
-    
-    if (active.startsWith('g:')) {
-      base.groupId = id;
-    } else {
-      base.recipientId = id;
+    function toggleAuthMode() {
+      isRegister = !isRegister;
+      document.getElementById('auth-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
+      document.getElementById('auth-toggle').innerText = isRegister ? 'Already have an account? Sign In' : 'Need an account? Register';
+      document.getElementById('auth-error').style.display = 'none';
     }
 
-    ws.send(JSON.stringify(base));
-    addMessage(active, {id: base.id, from: me.id, name: me.username, text, ts: base.ts});
-    input.value = '';
-  });
+    async function submitAuth() {
+      const username = document.getElementById('username-input').value.trim();
+      const password = document.getElementById('password-input').value.trim();
+      const errBox = document.getElementById('auth-error');
+      errBox.style.display = 'none';
 
-  // ---------- new chat by username ----------
-  async function startDirect() {
-    const raw = $('#newUser').value.trim(); 
-    if (!raw) return;
-    
-    const id = toId(raw);
-    if (id === me.id) { 
-      alert("You cannot start a DM with yourself.");
-      $('#newUser').value = ''; 
-      return; 
-    }
-
-    try {
-      const res = await fetch(`/api/user-exists/${encodeURIComponent(raw)}`);
-      const data = await res.json();
-
-      if (!data.exists) {
-        alert(`User "${raw}" not found.`);
+      if (!username || !password) {
+        errBox.innerText = 'Please enter both username and password.';
+        errBox.style.display = 'block';
         return;
       }
 
-      const validUser = data.user;
-      if (!state.contacts[validUser.id]) {
-        state.contacts[validUser.id] = { id: validUser.id, username: validUser.username };
-      }
+      const endpoint = isRegister ? '/api/register' : '/api/login';
       
-      $('#newUser').value = ''; 
-      saveState(); 
-      openConv('u:' + validUser.id);
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
 
-    } catch (err) {
-      alert("Error checking username. Please check your network connection.");
-    }
-  }
-
-  $('#startChat').onclick = startDirect;
-  $('#newUser').addEventListener('keydown', e => { 
-    if (e.key === 'Enter') { 
-      e.preventDefault(); 
-      startDirect(); 
-    } 
-  });
-
-  function getVoiceRoomId(activeKey) {
-    if (!activeKey) return null;
-    if (activeKey.startsWith('g:')) return activeKey;
-    const otherId = activeKey.slice(2);
-    const sorted = [me.id, otherId].sort();
-    return `dm_${sorted[0]}_${sorted[1]}`;
-  }
-
-  // ---------- VOICE CHANNEL STREAMING ----------
-  $('#voiceToggleBtn').onclick = () => {
-    const canonicalRoomId = getVoiceRoomId(active);
-    if (activeVoiceRoom === canonicalRoomId) {
-      leaveVoiceRoom();
-    } else {
-      joinVoiceRoom(canonicalRoomId);
-    }
-  };
-
-  $('#leaveVoiceBtn').onclick = () => leaveVoiceRoom();
-
-  async function joinVoiceRoom(roomId) {
-    leaveVoiceRoom();
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      activeVoiceRoom = roomId;
-
-      const roomName = $('#chName').textContent;
-      $('#voiceRoomTitle').textContent = `Voice Channel: ${roomName}`;
-      $('#voiceBar').hidden = false;
-      renderHeader();
-
-      ws.send(JSON.stringify({ type: 'join_voice_room', roomId: activeVoiceRoom }));
-
-      const txAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      const source = txAudioCtx.createMediaStreamSource(micStream);
-      audioProcNode = txAudioCtx.createScriptProcessor(2048, 1, 1);
-
-      audioProcNode.onaudioprocess = (e) => {
-        if (!activeVoiceRoom || !ws || ws.readyState !== WebSocket.OPEN) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+        const data = await res.json();
+        if (res.ok && data.success) {
+          currentUser = data.username;
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('app-screen').style.display = 'flex';
+          initApp();
+        } else {
+          errBox.innerText = data.error || 'Authentication failed.';
+          errBox.style.display = 'block';
         }
+      } catch (err) {
+        errBox.innerText = 'Server connection failed.';
+        errBox.style.display = 'block';
+      }
+    }
 
-        let binary = '';
-        const bytes = new Uint8Array(pcm16.buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
+    function initApp() {
+      initWebSocket();
+      loadChannels();
+      loadMessages(activeChannel);
+    }
+
+    function initWebSocket() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}`);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'new_message' && data.message.channel_id === activeChannel) {
+            appendMessage(data.message);
+          }
+        } catch (e) {
+          console.error('Error parsing WebSocket message:', e);
         }
-        const base64Audio = btoa(binary);
-
-        ws.send(JSON.stringify({
-          type: 'voice_chunk',
-          audio: base64Audio
-        }));
       };
-
-      source.connect(audioProcNode);
-      audioProcNode.connect(txAudioCtx.destination);
-
-    } catch (err) {
-      alert("Microphone permission required to join voice channel.");
-    }
-  }
-
-  function leaveVoiceRoom() {
-    if (activeVoiceRoom) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'leave_voice_room' }));
-      }
-      activeVoiceRoom = null;
     }
 
-    if (audioProcNode) {
-      try { audioProcNode.disconnect(); } catch(e){}
-      audioProcNode = null;
+    async function loadChannels() {
+      try {
+        const res = await fetch('/api/channels');
+        const channels = await res.json();
+        const container = document.getElementById('channels-list');
+        container.innerHTML = '';
+        channels.forEach(ch => {
+          const div = document.createElement('div');
+          div.className = `channel-item ${ch.id === activeChannel ? 'active' : ''}`;
+          div.innerText = `# ${ch.name}`;
+          div.onclick = () => switchChannel(ch.id, ch.name);
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error('Failed to load channels:', err);
+      }
     }
 
-    if (micStream) {
-      micStream.getTracks().forEach(track => track.stop());
-      micStream = null;
+    function switchChannel(id, name) {
+      activeChannel = id;
+      document.getElementById('current-channel-name').innerText = `# ${name}`;
+      document.getElementById('message-input').placeholder = `Message #${name}`;
+      loadChannels();
+      loadMessages(id);
     }
 
-    $('#voiceBar').hidden = true;
-    renderHeader();
-  }
-
-  function playPCMChunk(base64Audio) {
-    try {
-      if (!rxAudioCtx) {
-        rxAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-        nextPlayTime = rxAudioCtx.currentTime;
+    async function loadMessages(channelId) {
+      if (!channelId) return;
+      try {
+        const res = await fetch(`/api/messages/${channelId}`);
+        const messages = await res.json();
+        const container = document.getElementById('chat-messages');
+        container.innerHTML = '';
+        if (Array.isArray(messages)) {
+          messages.forEach(appendMessage);
+        }
+      } catch (err) {
+        console.error('Failed to load chat history:', err);
       }
-
-      if (rxAudioCtx.state === 'suspended') {
-        rxAudioCtx.resume();
-      }
-
-      const binary = atob(base64Audio);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      const pcm16 = new Int16Array(bytes.buffer);
-      const float32 = new Float32Array(pcm16.length);
-
-      for (let i = 0; i < pcm16.length; i++) {
-        float32[i] = pcm16[i] / 32768.0;
-      }
-
-      const buffer = rxAudioCtx.createBuffer(1, float32.length, 16000);
-      buffer.getChannelData(0).set(float32);
-
-      const source = rxAudioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(rxAudioCtx.destination);
-
-      const now = rxAudioCtx.currentTime;
-      if (nextPlayTime < now) {
-        nextPlayTime = now;
-      }
-
-      source.start(nextPlayTime);
-      nextPlayTime += buffer.duration;
-
-    } catch(e){
-      console.error("PCM Audio playback error:", e);
     }
-  }
 
-  // ---------- groups ----------
-  const dlg = $('#groupDlg');
-  $('#newGroup').onclick = () => {
-    const pick = $('#gpick'); pick.replaceChildren();
-    const people = Object.values(state.contacts);
-    if (!people.length) pick.append(el('div', 'empty-list', 'Start a chat with someone first, then add them to a group.'));
-    people.forEach(c => {
-      const l = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = c.id;
-      l.append(cb, document.createTextNode(c.username + (online.has(c.id) ? '  (online)' : '')));
-      pick.append(l);
-    });
-    $('#gname').value = '';
-    dlg.showModal(); $('#gname').focus();
-  };
-  $('#gcancel').onclick = () => dlg.close();
-  $('#groupForm').addEventListener('submit', e => {
-    const name = $('#gname').value.trim();
-    const members = [...$('#gpick').querySelectorAll('input:checked')].map(i => i.value);
-    if (!name || !members.length) { e.preventDefault(); return; }
-    members.unshift(me.id);
-    const groupId = 'g_' + uid();
-    const group = {id: groupId, name, members};
-    state.groups[groupId] = group; saveState();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({type: 'create_group', groupId, groupName: name, members}));
+    function appendMessage(msg) {
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'msg';
+      const initial = (msg.username || '?').charAt(0).toUpperCase();
+      const time = new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      div.innerHTML = `
+        <div class="avatar">${initial}</div>
+        <div class="msg-content">
+          <div class="msg-header">
+            <span class="msg-author">${msg.username}</span>
+            <span class="msg-time">${time}</span>
+          </div>
+          <div class="msg-text">${msg.content}</div>
+        </div>
+      `;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
     }
-    setTimeout(() => openConv('g:' + groupId), 0);
-  });
 
-  // ---------- auto sign-in ----------
-  try {
-    const saved = store.get(SESSION_KEY);
-    if (saved && saved.id) startApp(saved);
-  } catch (e) {
-    store.del(SESSION_KEY);
-  }
-})();
-</script>
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') {
+        const input = document.getElementById('message-input');
+        const content = input.value.trim();
+        if (content && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'chat_message',
+            channelId: activeChannel,
+            username: currentUser,
+            content: content
+          }));
+          input.value = '';
+        }
+      }
+    }
+  </script>
 </body>
 </html>
